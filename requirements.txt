@@ -1,0 +1,7 @@
+SpeechRecognition
+pyaudio
+google-genai
+openai
+edge-tts
+miniaudio
+pydub

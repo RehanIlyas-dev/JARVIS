@@ -1,0 +1,47 @@
+
+# ── Virtual Environment ───────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Python Cache & Bytecode ───────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ── API Keys & Secrets ────────────────────────
+.env
+.env.*
+secrets.py
+config_local.py
+
+# ── Temp Audio Files (edge-tts scratch files) ─
+*.mp3
+*.wav
+*.ogg
+jarvis_screenshot.png
+
+# ── Logs ──────────────────────────────────────
+*.log
+logs/
+
+# ── OS Junk ───────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / Editor ──────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Build & Distribution ──────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
