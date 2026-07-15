@@ -62,28 +62,6 @@ fallback only when internet access is unavailable.
 
 ---
 
-## Project Structure
-
-```
-jarvis/
-├── jarvis/              # Core Python package namespace
-│   ├── __init__.py      # Package initializer
-│   ├── main.py          # Entry point — voice loop, text loop, agentic orchestration
-│   ├── brain.py         # LLM integration (Gemini / OpenAI / Ollama), fallback mode
-│   ├── stt.py           # Speech-to-Text (PyAudio + Google Speech Recognition)
-│   ├── tts.py           # Text-to-Speech (edge-tts + miniaudio + PyAudio)
-│   ├── system_agent.py  # Shell command execution, safety guardrails, cd tracking
-│   ├── web_app.py       # Optional Flask web interface with SSE streaming
-│   ├── templates/       # Flask HTML templates
-│   └── static/          # Web interface assets (CSS/JS)
-├── pyproject.toml       # Modern Python packaging configuration
-├── .env.example         # Template configuration file
-├── run.sh               # Voice mode launcher script
-├── run_web.sh           # Web interface launcher script
-├── requirements.txt     # Python dependencies list
-└── venv/                # Python virtual environment
-```
-
 ---
 
 ## System Requirements
@@ -572,12 +550,6 @@ export GEMINI_API_KEY="your-key-here"
 - A set of destructive commands (rm -rf /, fork bombs, disk format commands) are permanently blocked regardless of LLM output.
 - Commands such as shutdown, rm -r, and passwd require explicit typed confirmation before execution.
 - API keys should be set as environment variables only. Never commit them to version control.
-
----
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
