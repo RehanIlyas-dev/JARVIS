@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis"
+version = "1.0.0"
+description = "J.A.R.V.I.S. Personal Voice Assistant"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "SpeechRecognition",
+    "pyaudio",
+    "google-genai",
+    "openai",
+    "edge-tts",
+    "miniaudio",
+    "pydub",
+    "flask"
+]
+
+[project.scripts]
+jarvis = "jarvis.main:main"
+jarvis-web = "jarvis.web_app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["jarvis*"]
+
+[tool.setuptools.package-data]
+jarvis = ["templates/*", "static/*"]

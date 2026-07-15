@@ -1,7 +1,6 @@
 import subprocess
 import os
 import platform
-import shlex
 
 
 # ---------------------------------------------------------------------------

@@ -110,12 +110,13 @@ class SpeechToText:
             return text
 
         except sr.WaitTimeoutError:
+            print("[JARVIS STT] No speech detected (timeout).")
             return None  # Silence for `timeout` seconds — normal in wake-word loop
         except sr.UnknownValueError:
-            print("[JARVIS STT] Could not understand the audio.")
+            print("[JARVIS STT] Could not understand the audio — speech was detected but Google could not recognise it.")
             return None
         except sr.RequestError as e:
-            print(f"[JARVIS STT] Google Speech API error: {e}")
+            print(f"[JARVIS STT] Google Speech API request failed: {e}")
             return None
         except OSError as e:
             print(f"[JARVIS STT] Microphone error: {e}")
