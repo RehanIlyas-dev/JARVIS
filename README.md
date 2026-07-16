@@ -1,8 +1,10 @@
 # JARVIS - Just A Rather Very Intelligent System
 
-A fully voice-controlled personal AI assistant with full system access, built in Python for Linux. Powered by Google's Gemini, Antigravity and Big Pickle.
+A fully voice-controlled personal AI assistant with full system access, built in Python. Powered by Google's Gemini, Antigravity and Big Pickle.
 JARVIS listens for a wake word, processes natural language via a large language model, executes
 shell commands autonomously, and speaks responses aloud using a high-quality neural voice.
+
+Fully functional on **Linux**, **macOS**, and **Windows**.
 
 ---
 
@@ -146,24 +148,14 @@ cd JARVIS
 python -m venv venv
 venv\Scripts\activate
 
-# 4. Install PyAudio via a pre-built wheel
-#    Download the correct wheel from: https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio
-#    Example for Python 3.11 64-bit:
-pip install PyAudio-0.2.14-cp311-cp311-win_amd64.whl
+# 4. Install PyAudioWPatch (drop-in Windows-compatible PyAudio replacement)
+pip install PyAudioWPatch
 
-# 5. Install remaining dependencies
+# 5. Create a pyaudio.py shim in site-packages to map pyaudio to pyaudiowpatch
+python -c "import pathlib, pyaudiowpatch; (pathlib.Path(pyaudiowpatch.__file__).parent.parent / 'pyaudio.py').write_text('# Shim\nfrom pyaudiowpatch import *\n')"
+
+# 6. Install remaining dependencies
 pip install -r requirements.txt
-
-# 6. Create run.bat (one-time setup)
-copy NUL run.bat
-```
-
-Paste the following into `run.bat`:
-
-```bat
-@echo off
-call "%~dp0venv\Scripts\activate.bat"
-python "%~dp0main.py" %*
 ```
 
 Then run JARVIS:
@@ -297,10 +289,11 @@ Prints the full LLM responses and any tracebacks to the terminal.
 
 ### Offline Mode (No API Key)
 
-If no API key is set, JARVIS runs in **fallback mode** with a built-in command matcher. No LLM API required. Say the wake word and command as usual, or type them in text mode.
+If no API key is set, or the Gemini free-tier quota is exhausted (429), JARVIS automatically switches to **fallback mode**. No LLM API required. Say the wake word and command as usual, or type them in text mode.
 
 **What works offline:**
 - **Brain**: Built-in command matcher handles 50+ commands without any API
+- **NL → Command Translation**: Natural-language requests like "show me the processes" or "search for readme" are translated to the correct OS-native command and executed via `SystemAgent`
 - **TTS**: Falls back to `espeak-ng` (robotic but functional). Install with `sudo apt install espeak-ng`
 - **Text mode**: Fully offline — type commands directly
 

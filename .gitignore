@@ -45,3 +45,4 @@ dist/
 build/
 *.egg-info/
 *.egg
+AGENTS.md
