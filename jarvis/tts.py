@@ -1,44 +1,18 @@
 import asyncio
-import ctypes
-import ctypes.util
 import os
+import platform
 import tempfile
 
 import miniaudio
-import pyaudio
-
-
-# Must be kept alive at module level so the GC doesn't destroy it
-# while ALSA still holds a pointer to it.
-_ALSA_ERROR_HANDLER_CB = None
-
-
-def _suppress_alsa_errors():
-    """
-    Suppress the flood of ALSA/JACK probing errors that PyAudio prints to stderr
-    on every init. These are harmless — PyAudio just tries every backend.
-    """
-    global _ALSA_ERROR_HANDLER_CB
-    try:
-        asound = ctypes.cdll.LoadLibrary(
-            ctypes.util.find_library("asound") or "libasound.so.2"
-        )
-        ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
-            None, ctypes.c_char_p, ctypes.c_int,
-            ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p,
-        )
-        _ALSA_ERROR_HANDLER_CB = ERROR_HANDLER_FUNC(lambda *_: None)
-        asound.snd_lib_error_set_handler(_ALSA_ERROR_HANDLER_CB)
-    except Exception:
-        pass  # If we can't suppress them, just live with the noise
+import sounddevice as sd
 
 
 class TextToSpeech:
     """
     High-quality TTS using Microsoft Edge TTS (edge-tts).
-    Audio pipeline: edge-tts → MP3 file → miniaudio decoder → PyAudio output.
+    Audio pipeline: edge-tts -> MP3 file -> miniaudio decoder -> sounddevice output.
     No system-level audio tools (mpg123, ffmpeg, etc.) required.
-    Voice: en-GB-RyanNeural — British male, fits the JARVIS aesthetic perfectly.
+    Voice: en-GB-RyanNeural - British male, fits the JARVIS aesthetic perfectly.
     """
 
     VOICE = "en-GB-RyanNeural"
@@ -46,8 +20,6 @@ class TextToSpeech:
     PITCH = "-5Hz"  # slightly deeper for that JARVIS timbre
 
     def __init__(self):
-        _suppress_alsa_errors()          # silence ALSA/JACK probe noise
-        self._pa = pyaudio.PyAudio()
         self._verify_edge_tts()
 
     def _verify_edge_tts(self):
@@ -63,7 +35,7 @@ class TextToSpeech:
     # ------------------------------------------------------------------
 
     def speak(self, text: str):
-        """Speak text synchronously — blocks until audio finishes playing."""
+        """Speak text synchronously - blocks until audio finishes playing."""
         if not text or not text.strip():
             return
 
@@ -79,18 +51,8 @@ class TextToSpeech:
 
         self._speak_espeak(text)
 
-    def __del__(self):
-        try:
-            self._pa.terminate()
-        except Exception:
-            pass
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
     def _speak_edge(self, text: str):
-        """Generate MP3 with edge-tts, decode with miniaudio, play via PyAudio."""
+        """Generate MP3 with edge-tts, decode with miniaudio, play via sounddevice."""
         import edge_tts
 
         async def _generate(path: str):
@@ -111,27 +73,93 @@ class TextToSpeech:
                 pass
 
     def _play_mp3(self, mp3_path: str):
-        """Decode mp3 with miniaudio and stream PCM frames through PyAudio."""
+        """Decode mp3 with miniaudio and play via sounddevice."""
         decoded = miniaudio.decode_file(mp3_path)
 
-        stream = self._pa.open(
-            format=pyaudio.paInt16,
-            channels=decoded.nchannels,
-            rate=decoded.sample_rate,
-            output=True,
-        )
         try:
-            # Write in chunks for smoother playback
+            import numpy as np
             raw = bytes(decoded.samples)
-            chunk_size = 4096
-            for i in range(0, len(raw), chunk_size):
-                stream.write(raw[i : i + chunk_size])
-        finally:
-            stream.stop_stream()
-            stream.close()
+            audio_array = np.frombuffer(raw, dtype=np.int16).reshape(-1, decoded.nchannels)
+            sd.play(audio_array, samplerate=decoded.sample_rate)
+            sd.wait()
+        except Exception as e:
+            print(f"[JARVIS TTS] Playback error: {e}")
+
+    def stop(self):
+        """Stop any currently-playing audio immediately (cross-platform)."""
+        try:
+            sd.stop()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Gemini STT (no daily quota)
+    # ------------------------------------------------------------------
+
+    def _recognize_gemini(self, audio):
+        """
+        Transcribe raw AudioData via Gemini's multimodal API.
+        Avoids the free Google Speech API's ~50 req/day quota that
+        otherwise silently breaks recognition.
+        Raises sr.UnknownValueError if no speech is recognised.
+        """
+        import google.genai as genai
+        from google.genai import types
+
+        wav_bytes = audio.get_wav_data()
+
+        client = genai.Client(api_key=self._gemini_key)
+        contents = [
+            "Transcribe this short spoken audio clip. Reply with ONLY the spoken words, "
+            "no punctuation commentary, no quotes. If there is no speech, reply with an empty string.",
+            types.Part(
+                inline_data=types.Blob(
+                    mime_type="audio/wav",
+                    data=wav_bytes,
+                )
+            ),
+        ]
+        config = types.GenerateContentConfig(
+            temperature=0.0,
+        )
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config=config,
+        )
+        text = (resp.text or "").strip()
+        if not text:
+            raise sr.UnknownValueError("Gemini returned no transcript")
+        return text
 
     def _speak_espeak(self, text: str):
-        """Offline fallback using espeak-ng (robotic but always works)."""
+        """Offline fallback: Windows SAPI on Windows, espeak-ng elsewhere."""
+        if platform.system() == "Windows":
+            self._speak_windows_sapi(text)
+        else:
+            self._speak_espeak_linux(text)
+
+    def _speak_windows_sapi(self, text: str):
+        """Windows offline fallback using SAPI via pyttsx3 or direct COM."""
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            engine.setProperty("rate", 170)
+            engine.say(text)
+            engine.runAndWait()
+            return
+        except Exception:
+            pass
+        # Direct COM fallback - works without pyttsx3
+        try:
+            import comtypes.client
+            speaker = comtypes.client.CreateObject("SAPI.SpVoice")
+            speaker.Speak(text)
+        except Exception as e:
+            print(f"[JARVIS TTS] Windows SAPI failed: {e}. Text was: {text}")
+
+    def _speak_espeak_linux(self, text: str):
+        """Linux/macOS offline fallback using espeak-ng."""
         import subprocess
         for cmd in ["espeak-ng", "espeak"]:
             try:

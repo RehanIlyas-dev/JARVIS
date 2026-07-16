@@ -1,5 +1,14 @@
 import os
+import platform
 import re
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+_IS_WINDOWS = (platform.system() == "Windows")
 
 
 # ---------------------------------------------------------------------------
@@ -9,6 +18,8 @@ import re
 _DANGEROUS_PREFIXES = (
     "rm ", "sudo rm", "shutdown", "reboot", "halt", "poweroff",
     "mkfs", "dd if=", "passwd", "userdel",
+    "del /s", "format ", "rmdir /s", "rd /s",
+    "Remove-Item -Recurse", "Format-Volume",
 )
 
 
@@ -133,37 +144,36 @@ CURRENT DIRECTORY CONTENTS:
 {cwd_listing}
 
 CRITICAL RULES:
-1. ALWAYS ACT. When the user asks you to do ANYTHING, you MUST output a <run>...</run> command to do it. Never just say you will do it without actually executing a command. The ONLY exception is pure greetings or general knowledge questions.
+1. ALWAYS ACT for ACTIONS. When the user asks you to do something (open a program, list files, run a tool, change settings, get system info), you MUST output a <run>...</run> command. Never just say you will do it without actually executing a command.
+2. NEVER wrap KNOWLEDGE QUESTIONS in <run>. If the user asks a factual or general-knowledge question (e.g. "who is Sam Altman", "what is a black hole", "tell me about X"), DO NOT emit a <run> command. Answer directly in plain spoken English. Only questions that require interacting with the system (files, apps, settings, hardware, processes) use <run>. Greetings and small talk are also answered directly without <run>.
 2. Be concise and conversational. Speak in short natural sentences like a butler. Use TTS-friendly language (no markdown, no bullet points, no code blocks in your speech).
-3. For commands: output exactly <run>bash_command_here</run>. You can chain commands with && or ;. The system will execute it and return the output.
+3. For commands: output exactly <run>command_here</run>. You can chain commands with && or ;. Use PowerShell or cmd commands. The system will execute it and return the output.
 4. You can ONLY run ONE command per turn. After seeing the result, decide if you need another command.
 5. If a command fails, try an alternative approach. Never give up.
-6. NEVER suggest: rm -rf /, shutdown now, mkfs, or any fork bomb. These will be blocked.
+6. NEVER suggest: format, del /s, shutdown /s, or any destructive system commands. These will be blocked.
 
 COMMAND EXAMPLES (how to interpret user intent):
-- "open the folders" / "list everything"        -> <run>ls -la</run>
+- "open the folders" / "list everything"        -> <run>{'dir' if _IS_WINDOWS else 'ls -la'}</run>
 - "open folder X" / "go to X"                  -> <run>cd X</run>
-- "open Firefox"                               -> <run>firefox &</run>
-- "what time is it"                            -> <run>date</run>
-- "how much memory" / "RAM usage"              -> <run>free -h</run>
-- "disk space" / "storage"                     -> <run>df -h</run>
-- "find files" / "search for X"               -> <run>find . -iname "*X*" -maxdepth 3</run>
-- "create folder X"                            -> <run>mkdir -p X</run>
-- "delete file X"                              -> <run>rm -i X</run>
-- "read file X"                                -> <run>cat X</run>
-- "who am I"                                   -> <run>whoami</run>
-- "what's running" / "processes"              -> <run>top -bn1 | head -15</run>
-- "system info"                                -> <run>uname -a && lscpu | grep 'Model name'</run>
-- "network" / "IP address"                     -> <run>hostname -I && ip route | grep default</run>
-- "install X"                                  -> <run>sudo apt install -y X</run>
-- "take a screenshot"                          -> <run>gnome-screenshot -f ~/screenshot.png</run>
-- "volume up"                                  -> <run>amixer sset Master 10%+</run>
-- "volume down"                                -> <run>amixer sset Master 10%-</run>
-- "brightness up"                              -> <run>brightnessctl s +10%</run>
-- "brightness down"                            -> <run>brightnessctl s 10%-</run>
+- "open an application"                        -> <run>{'start "" "app_name"' if _IS_WINDOWS else 'app_name &'}</run>
+- "what time is it"                            -> <run>{'powershell Get-Date' if _IS_WINDOWS else 'date'}</run>
+- "how much memory" / "RAM usage"              -> <run>{'powershell "Get-CimInstance Win32_OperatingSystem | Select TotalVisibleMemorySize,FreePhysicalMemory"' if _IS_WINDOWS else 'free -h'}</run>
+- "disk space" / "storage"                     -> <run>{'powershell "Get-PSDrive C | Select Used,Free"' if _IS_WINDOWS else 'df -h'}</run>
+- "find files" / "search for X"               -> <run>{'powershell "Get-ChildItem -Recurse -Filter *X* -ErrorAction SilentlyContinue | Select FullName"' if _IS_WINDOWS else 'find . -name "*X*"'}</run>
+- "create folder X"                            -> <run>mkdir X</run>
+- "delete file X"                              -> <run>{'del X' if _IS_WINDOWS else 'rm X'}</run>
+- "read file X"                                -> <run>{'powershell Get-Content X' if _IS_WINDOWS else 'cat X'}</run>
+- "who am I"                                   -> <run>{'whoami' if _IS_WINDOWS else 'whoami; id'}</run>
+        - "what's running" / "process" / "processes"        -> <run>{'Get-Process | Sort-Object CPU -Descending | Select-Object -First 15 Name,CPU,WorkingSet64 | Format-Table -AutoSize' if _IS_WINDOWS else 'ps aux --sort=-%mem | head -15'}</run>
+- "system info"                                -> <run>{'powershell "Get-CimInstance Win32_Processor | Select Name"' if _IS_WINDOWS else 'uname -a; lscpu'}</run>
+- "network" / "IP address"                     -> <run>{'powershell Get-NetIPAddress -AddressFamily IPv4 | Select IPAddress' if _IS_WINDOWS else 'hostname -I'}</run>
+- "open Task Manager"                          -> <run>{'taskmgr' if _IS_WINDOWS else 'gnome-system-monitor &'}</run>
+        - "volume up"                                  -> <run>{'$wsh = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 5;$i++){{$wsh.SendKeys([char]175)}}' if _IS_WINDOWS else 'amixer sset Master 10%+'}</run>
+        - "volume down"                                -> <run>{'$wsh = New-Object -ComObject WScript.Shell; for($i=0;$i -lt 5;$i++){{$wsh.SendKeys([char]174)}}' if _IS_WINDOWS else 'amixer sset Master 10%-'}</run>
 
 RESPONSE FORMAT:
-- First say what you're doing in 1 short sentence, then output the <run> command.
+- For ACTIONS: first say what you're doing in 1 short sentence, then output the <run> command.
+- For KNOWLEDGE QUESTIONS and greetings: answer directly in plain spoken English. DO NOT use <run> at all.
 - After receiving a system result, explain what happened in 1-2 sentences.
 - Keep ALL spoken text clean: no asterisks, no hash signs, no backticks, no special formatting.
 - ALWAYS respond in English ONLY. Never use any other language, regardless of what language the user speaks in. Every single response must be entirely in English.
@@ -243,10 +253,10 @@ RESPONSE FORMAT:
                 import traceback
                 traceback.print_exc()
 
-            # Network or API failure — fall back to offline command matcher
+            # Network or API failure - fall back to offline command matcher
             # so the user still gets a useful response without internet.
             if self.provider != "fallback":
-                print("[JARVIS Brain] API unreachable — falling back to offline mode for this request.")
+                print("[JARVIS Brain] API unreachable - falling back to offline mode for this request.")
                 return self._simulate_fallback(user_message)
 
             return (
@@ -278,7 +288,7 @@ RESPONSE FORMAT:
             return text
 
         # If this is a system execution result being fed back, just summarize it
-        # and stop — do NOT try to match commands against the result output.
+        # and stop - do NOT try to match commands against the result output.
         if "[system execution result" in msg_lower:
             # Extract useful info from the result
             stdout_match = re.search(r"stdout='(.*?)'", user_message, re.DOTALL)
@@ -290,7 +300,7 @@ RESPONSE FORMAT:
             status = status_match.group(1) if status_match else "unknown"
 
             if status == "success" and stdout:
-                # Return the raw output — no <run> tag, so the loop stops
+                # Return the raw output - no <run> tag, so the loop stops
                 return respond(stdout)
             elif stderr:
                 return respond(f"Command completed with an error: {stderr}")
@@ -302,27 +312,42 @@ RESPONSE FORMAT:
 
         # --- Weather ---
         if any(w in msg_lower for w in ["weather", "forecast", "is it raining"]):
+            if _IS_WINDOWS:
+                return respond("Checking the weather forecast, Sir. <run>(Invoke-WebRequest -Uri 'https://wttr.in?format=3' -UseBasicParsing).Content</run>")
             return respond("Checking the weather forecast, Sir. <run>curl -s wttr.in?format=3 || curl -s wttr.in</run>")
 
         # --- Directory Listings and Paths ---
-        if any(w in msg_lower for w in ["list", "folder", "directory", "directories", "files", "show me", "what's in", "what is in"]):
-            cmd = "ls -la"
+        if any(w in msg_lower for w in ["list", "folder", "directory", "directories", "files", "what's in", "what is in"]):
+            if _IS_WINDOWS:
+                cmd = "Get-ChildItem -Force"
+            else:
+                cmd = "ls -la"
             return respond(f"Right away Sir. <run>{cmd}</run>")
 
         if any(w in msg_lower for w in ["where am i", "current path", "working directory"]):
+            if _IS_WINDOWS:
+                return respond("Checking our current working path, Sir. <run>cd</run>")
             return respond("Checking our current working path, Sir. <run>pwd</run>")
 
         # --- Directory Navigation ---
         if any(w in msg_lower for w in ["go home", "go to home", "change to home"]):
+            if _IS_WINDOWS:
+                return respond("Navigating to your home directory, Sir. <run>cd $env:USERPROFILE</run>")
             return respond("Navigating to your home directory, Sir. <run>cd ~</run>")
 
         if any(w in msg_lower for w in ["downloads folder", "go to downloads"]):
+            if _IS_WINDOWS:
+                return respond("Navigating to Downloads, Sir. <run>cd $env:USERPROFILE\\Downloads</run>")
             return respond("Navigating to Downloads, Sir. <run>cd ~/Downloads</run>")
 
         if any(w in msg_lower for w in ["documents folder", "go to documents"]):
+            if _IS_WINDOWS:
+                return respond("Navigating to Documents, Sir. <run>cd $env:USERPROFILE\\Documents</run>")
             return respond("Navigating to Documents, Sir. <run>cd ~/Documents</run>")
 
         if any(w in msg_lower for w in ["desktop folder", "go to desktop"]):
+            if _IS_WINDOWS:
+                return respond("Navigating to Desktop, Sir. <run>cd $env:USERPROFILE\\Desktop</run>")
             return respond("Navigating to Desktop, Sir. <run>cd ~/Desktop</run>")
 
         # --- File Actions ---
@@ -334,6 +359,8 @@ RESPONSE FORMAT:
             # Sanitize path to prevent arbitrary shell injection
             file_name = re.sub(r"[^\w.\-/~]", "", file_name)
             if file_name:
+                if _IS_WINDOWS:
+                    return respond(f"Reading file {file_name}, Sir. <run>type {file_name}</run>")
                 return respond(f"Reading file {file_name}, Sir. <run>cat {file_name}</run>")
             else:
                 return respond("Which file would you like me to read, Sir?")
@@ -345,6 +372,8 @@ RESPONSE FORMAT:
             file_name = raw.strip()
             file_name = re.sub(r"[^\w.\-/~]", "", file_name)
             if file_name:
+                if _IS_WINDOWS:
+                    return respond(f"Removing file {file_name} with confirmation prompt, Sir. <run>del {file_name}</run>")
                 return respond(f"Removing file {file_name} with confirmation prompt, Sir. <run>rm -i {file_name}</run>")
             else:
                 return respond("Which file would you like me to delete, Sir?")
@@ -355,64 +384,121 @@ RESPONSE FORMAT:
                 raw = raw.replace(phrase, "")
             folder_name = re.sub(r"[^\w.\-]", "_", raw.strip().strip("called").strip("named").strip()).strip("_")
             if folder_name:
-                return respond(f"Creating folder {folder_name}, Sir. <run>mkdir -p {folder_name} && echo 'Created {folder_name}'</run>")
+                if _IS_WINDOWS:
+                    return respond(f"Creating folder {folder_name}, Sir. <run>mkdir {folder_name}</run>")
+                return respond(f"Creating folder {folder_name}, Sir. <run>mkdir -p {folder_name}; echo 'Created {folder_name}'</run>")
             else:
                 return respond("What would you like to name the folder, Sir?")
 
         if any(w in msg_lower for w in ["search", "find"]):
             search_term = re.sub(r"[^\w.\-]", "", msg_lower.replace("search", "").replace("find", "").replace("for", "").strip())
             if search_term:
+                if _IS_WINDOWS:
+                    return respond(f"Searching for {search_term}, Sir. <run>Get-ChildItem -Recurse -Filter '*{search_term}*' -ErrorAction SilentlyContinue | Select-Object FullName</run>")
                 return respond(f"Searching for {search_term}, Sir. <run>find . -iname '*{search_term}*' -maxdepth 3 2>/dev/null</run>")
             else:
                 return respond("What would you like me to search for, Sir?")
 
+        # --- Kill / Stop Processes ---
+        if any(w in msg_lower for w in ["kill", "stop", "close", "terminate"]):
+            import re as _re
+            proc_match = _re.search(
+                r"(?:kill|stop|close|terminate)\s+(?:all\s+)?(\S+?)(?:\s+process(?:es)?)?$",
+                msg_lower,
+            )
+            if proc_match:
+                proc_name = proc_match.group(1)
+                if _IS_WINDOWS:
+                    return respond(
+                        f"Killing {proc_name} processes, Sir. "
+                        f"<run>taskkill /F /IM {proc_name}.exe</run>"
+                    )
+                return respond(
+                    f"Killing {proc_name} processes, Sir. "
+                    f"<run>pkill -f {proc_name}</run>"
+                )
+            else:
+                if _IS_WINDOWS:
+                    return respond("Kill what, Sir? Usage: kill chrome / kill notepad")
+                return respond("Kill what, Sir? Usage: kill chrome / kill firefox")
+
         # --- Launching Web Browsers ---
         if any(w in msg_lower for w in ["firefox", "browser", "internet"]):
+            if _IS_WINDOWS:
+                return respond("Launching Firefox in the background, Sir. <run>start firefox</run>")
             return respond("Launching Firefox in the background, Sir. <run>firefox &</run>")
 
         if any(w in msg_lower for w in ["chrome", "google chrome"]):
+            if _IS_WINDOWS:
+                return respond("Launching Google Chrome, Sir. <run>start chrome</run>")
             return respond("Launching Google Chrome, Sir. <run>google-chrome & || google-chrome-stable &</run>")
 
         if "brave" in msg_lower:
+            if _IS_WINDOWS:
+                return respond("Launching Brave Browser, Sir. <run>start brave</run>")
             return respond("Launching Brave Browser, Sir. <run>brave-browser &</run>")
 
         # --- Launching Code Editors ---
         if any(w in msg_lower for w in ["vscode", "vs code", "open code"]):
+            if _IS_WINDOWS:
+                return respond("Opening Visual Studio Code, Sir. <run>start code</run>")
             return respond("Opening Visual Studio Code, Sir. <run>code . &</run>")
 
         if "sublime" in msg_lower:
+            if _IS_WINDOWS:
+                return respond("Opening Sublime Text, Sir. <run>start subl</run>")
             return respond("Opening Sublime Text, Sir. <run>subl &</run>")
 
         if "pycharm" in msg_lower:
+            if _IS_WINDOWS:
+                return respond("Opening PyCharm, Sir. <run>start pycharm</run>")
             return respond("Opening PyCharm, Sir. <run>pycharm &</run>")
 
         # --- Launching Productivity & Chat Apps ---
         if "slack" in msg_lower:
+            if _IS_WINDOWS:
+                return respond("Launching Slack, Sir. <run>start slack</run>")
             return respond("Launching Slack, Sir. <run>slack &</run>")
 
         if "discord" in msg_lower:
+            if _IS_WINDOWS:
+                return respond("Opening Discord, Sir. <run>start discord</run>")
             return respond("Opening Discord, Sir. <run>discord &</run>")
 
         if "telegram" in msg_lower:
+            if _IS_WINDOWS:
+                return respond("Opening Telegram, Sir. <run>start telegram</run>")
             return respond("Opening Telegram, Sir. <run>telegram-desktop &</run>")
 
         if any(w in msg_lower for w in ["spotify", "music"]):
+            if _IS_WINDOWS:
+                return respond("Opening Spotify, Sir. <run>start spotify</run>")
             return respond("Opening Spotify, Sir. <run>spotify &</run>")
 
         # --- Launching System Utilities ---
         if any(w in msg_lower for w in ["terminal", "console"]):
+            if _IS_WINDOWS:
+                return respond("Opening a terminal window, Sir. <run>powershell -NoExit</run>")
             return respond("Opening a terminal window, Sir. <run>gnome-terminal & || konsole & || xterm &</run>")
 
         if any(w in msg_lower for w in ["file manager", "open files"]):
+            if _IS_WINDOWS:
+                return respond("Opening the file manager, Sir. <run>explorer .</run>")
             return respond("Opening the file manager, Sir. <run>xdg-open . &</run>")
 
         if any(w in msg_lower for w in ["calculator", "calc"]):
+            if _IS_WINDOWS:
+                return respond("Opening the calculator, Sir. <run>calc</run>")
             return respond("Opening the calculator, Sir. <run>gnome-calculator & || kcalc &</run>")
 
         if any(w in msg_lower for w in ["system monitor", "task manager"]):
+            if _IS_WINDOWS:
+                return respond("Opening Task Manager, Sir. <run>taskmgr</run>")
             return respond("Opening System Monitor, Sir. <run>gnome-system-monitor &</run>")
 
         if any(w in msg_lower for w in ["notepad", "text editor", "gedit", "kate"]):
+            if _IS_WINDOWS:
+                return respond("Opening Notepad, Sir. <run>notepad</run>")
             return respond("Opening the text editor, Sir. <run>gedit & || kate & || mousepad &</run>")
 
         # --- Git Operations ---
@@ -962,56 +1048,90 @@ RESPONSE FORMAT:
 
         # --- Basic Telemetry & Hardware Control ---
         if any(w in msg_lower for w in ["temperature", "cpu temp", "how hot"]):
+            if _IS_WINDOWS:
+                return respond("Checking CPU temperature, Sir. <run>Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace 'root/wmi' | Select -ExpandProperty CurrentTemperature</run>")
             return respond("Checking CPU temperature, Sir. <run>sensors | grep -i temp || cat /sys/class/thermal/thermal_zone*/temp</run>")
 
         if any(w in msg_lower for w in ["battery", "charge", "power status"]):
+            if _IS_WINDOWS:
+                return respond("Checking battery status, Sir. <run>Get-CimInstance -ClassName Win32_Battery | Select-Object EstimatedChargeRemaining, BatteryStatus</run>")
             return respond("Checking battery status, Sir. <run>upower -i $(upower -e | grep 'BAT') | grep -E 'state|to full|percentage' || acpi -b || cat /sys/class/power_supply/BAT*/capacity</run>")
 
         if any(w in msg_lower for w in ["sound status", "audio devices"]):
-            return respond("Listing audio devices, Sir. <run>aplay -l && arecord -l</run>")
+            if _IS_WINDOWS:
+                return respond("Listing audio devices, Sir. <run>Get-CimInstance -ClassName Win32_SoundDevice | Select-Object Name, Status</run>")
+            return respond("Listing audio devices, Sir. <run>aplay -l; arecord -l</run>")
 
         if any(w in msg_lower for w in ["resolution", "screen size"]):
+            if _IS_WINDOWS:
+                return respond("Fetching display resolution, Sir. <run>Get-CimInstance -ClassName Win32_VideoController | Select-Object CurrentHorizontalResolution, CurrentVerticalResolution</run>")
             return respond("Fetching display resolution, Sir. <run>xrandr | grep '*' || xrandr</run>")
 
         if any(w in msg_lower for w in ["ping", "check internet", "online test"]):
+            if _IS_WINDOWS:
+                return respond("Pinging test servers to verify connectivity, Sir. <run>ping -n 3 google.com</run>")
             return respond("Pinging test servers to verify connectivity, Sir. <run>ping -c 3 google.com</run>")
 
         # --- System Controls & Volume ---
         if any(w in msg_lower for w in ["lock screen", "lock computer", "lock session"]):
+            if _IS_WINDOWS:
+                return respond("Locking the screen, Sir. <run>(New-Object -ComObject WScript.Shell).SendKeys(\\^%{ESCAPE}\\\")\"</run>")
             return respond("Locking the screen, Sir. <run>xdg-screensaver lock || gnome-screensaver-command -l || dbus-send --type=method_call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock</run>")
 
         if any(w in msg_lower for w in ["mute", "unmute", "toggle sound"]):
+            if _IS_WINDOWS:
+                return respond("Toggling master volume mute status, Sir. <run>$wsh = New-Object -ComObject WScript.Shell; $wsh.SendKeys([char]173)</run>")
             return respond("Toggling master volume mute status, Sir. <run>amixer sset Master toggle</run>")
 
         if any(w in msg_lower for w in ["volume up", "louder", "increase volume"]):
+            if _IS_WINDOWS:
+                return respond("Increasing volume, Sir. <run>$wsh = New-Object -ComObject WScript.Shell; 1..5 | ForEach-Object { $wsh.SendKeys([char]175) }</run>")
             return respond("Increasing volume, Sir. <run>amixer sset Master 10%+</run>")
 
         if any(w in msg_lower for w in ["volume down", "quieter", "decrease volume"]):
+            if _IS_WINDOWS:
+                return respond("Adjusting volume, Sir. <run>$wsh = New-Object -ComObject WScript.Shell; 1..5 | ForEach-Object { $wsh.SendKeys([char]174) }</run>")
             return respond("Adjusting volume, Sir. <run>amixer sset Master 10%-</run>")
 
         if any(w in msg_lower for w in ["time", "date", "what day", "what time"]):
+            if _IS_WINDOWS:
+                return respond("Let me check the time for you, Sir. <run>Get-Date -Format 'yyyy-MM-dd HH:mm:ss dddd'</run>")
             return respond("Let me check the time for you, Sir. <run>date</run>")
 
         if any(w in msg_lower for w in ["memory", "ram", "how much memory"]):
+            if _IS_WINDOWS:
+                return respond("Checking memory usage now, Sir. <run>Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory | Format-List</run>")
             return respond("Checking memory usage now, Sir. <run>free -h</run>")
 
         if any(w in msg_lower for w in ["disk", "storage", "space", "hard drive"]):
+            if _IS_WINDOWS:
+                return respond("Checking disk space, Sir. <run>Get-CimInstance -ClassName Win32_LogicalDisk | Select-Object DeviceID, @{N='SizeGB';E={[math]::Round($_.Size/1GB,1)}}, @{N='FreeGB';E={[math]::Round($_.FreeSpace/1GB,1)}} | Format-Table -AutoSize</run>")
             return respond("Checking disk space, Sir. <run>df -h</run>")
 
         if any(w in msg_lower for w in ["ip", "network", "internet", "connection"]):
-            return respond("Checking your network details, Sir. <run>hostname -I && ip route | grep default</run>")
+            if _IS_WINDOWS:
+                return respond("Checking your network details, Sir. <run>ipconfig | findstr /i \"IPv4 Gateway\"</run>")
+            return respond("Checking your network details, Sir. <run>hostname -I; ip route | grep default</run>")
 
         if any(w in msg_lower for w in ["process", "running", "what's running", "programs"]):
+            if _IS_WINDOWS:
+                return respond("Let me see what is currently running, Sir. <run>Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 15 Name, @{N='MemMB';E={[math]::Round($_.WorkingSet64/1MB,1)}} | Format-Table -AutoSize</run>")
             return respond("Let me see what is currently running, Sir. <run>ps aux --sort=-%mem | head -15</run>")
 
         if any(w in msg_lower for w in ["system info", "system information", "computer info", "machine"]):
-            return respond("Pulling system information, Sir. <run>uname -a && lscpu | grep 'Model name'</run>")
+            if _IS_WINDOWS:
+                return respond("Pulling system information, Sir. <run>Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber, OSArchitecture | Format-List; Get-CimInstance -ClassName Win32_Processor | Select-Object Name | Format-List</run>")
+            return respond("Pulling system information, Sir. <run>uname -a; lscpu | grep \'Model name\'</run>")
 
         if any(w in msg_lower for w in ["who am i", "whoami", "my user"]):
-            return respond("Identifying you, Sir. <run>whoami && id</run>")
+            if _IS_WINDOWS:
+                return respond("Identifying you, Sir. <run>Write-Host 'User:' $env:USERNAME; Write-Host 'Domain:' $env:USERDOMAIN; Write-Host 'PC:' $env:COMPUTERNAME</run>")
+            return respond("Identifying you, Sir. <run>whoami; id</run>")
 
         if any(w in msg_lower for w in ["screenshot", "screen capture"]):
-            return respond("Taking a screenshot, Sir. <run>gnome-screenshot -f ~/jarvis_screenshot.png && echo 'Saved.'</run>")
+            if _IS_WINDOWS:
+                return respond("Taking a screenshot, Sir. <run>Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::PrimaryScreen.Bounds | ForEach-Object { $bmp = New-Object System.Drawing.Bitmap($_.Width, $_.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($_.Location, [System.Drawing.Point]::Empty, $_.Size); $bmp.Save(\\$env:USERPROFILE\\jarvis_screenshot.png\\\") }; Write-Host 'Saved.'\"</run>")
+            return respond("Taking a screenshot, Sir. <run>gnome-screenshot -f ~/jarvis_screenshot.png; echo 'Saved.'</run>")
 
         if any(w in msg_lower for w in ["what can you do", "help", "capabilities"]):
             return respond(
@@ -1026,8 +1146,51 @@ RESPONSE FORMAT:
         if any(w in msg_lower for w in ["shut down", "shutdown", "bye", "goodbye"]):
             return respond("Shutting down. Goodbye Sir.")
 
-        # Unknown input — treat it as a raw bash command and let system_agent
-        # handle safety (blocked commands, dangerous confirmation, etc.)
+        # Unknown input - translate natural language to a real command and
+        # execute it directly so the user gets a spoken result (Option B).
+        # Only do this if a system_agent is wired in; otherwise fall
+        # back to the old wrap-and-let-the-loop-handle-it behaviour.
+        if self.system_agent is not None:
+            translated = self._fallback_translate(user_message)
+            # Guard: refuse to blindly run something that looks dangerous.
+            if translated and not self._command_is_dangerous(translated):
+                res = self.system_agent.execute_command(translated)
+                if res.get("status") == "success":
+                    out = (res.get("stdout") or "").strip()
+                    if out:
+                        return respond(out)
+                    err = (res.get("stderr") or "").strip()
+                    if err:
+                        return respond(f"Command finished with an error: {err}")
+                    return respond("Command finished, Sir.")
+                err = (res.get("stderr") or "").strip()
+                if err:
+                    return respond(f"I could not run that, Sir: {err}")
+                return respond("I could not run that, Sir.")
+
+        # system_agent present but nothing matched: try to translate
+        # the natural-language input into a real command and self-execute
+        # it, so we still return a spoken result instead of blindly
+        # wrapping the raw sentence as a (likely invalid) command.
+        if self.system_agent is not None:
+            translated = self._fallback_translate(user_message)
+            if translated and not self._command_is_dangerous(translated):
+                res = self.system_agent.execute_command(translated)
+                if res.get("status") == "success":
+                    out = (res.get("stdout") or "").strip()
+                    if out:
+                        return respond(out)
+                    err = (res.get("stderr") or "").strip()
+                    if err:
+                        return respond(f"Command finished with an error: {err}")
+                    return respond("Command finished, Sir.")
+                err = (res.get("stderr") or "").strip()
+                if err:
+                    return respond(f"I could not run that, Sir: {err}")
+                return respond("I could not run that, Sir.")
+
+        # No system_agent available: wrap as a command and let the
+        # agentic loop execute it (keeps old behaviour).
         safe_cmd = re.sub(r"[;&|`$]", "", user_message.strip())
         return respond(f"Running that for you, Sir. <run>{safe_cmd}</run>")
 
@@ -1036,11 +1199,177 @@ RESPONSE FORMAT:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _command_is_dangerous(command: str) -> bool:
+        """Refuse to blindly execute commands that could harm the system."""
+        c = command.lower().strip()
+        for blocked in ("rm -rf /", "rm -rf /*", "format ", "del /s",
+                          "shutdown", "reboot", "halt", "poweroff",
+                          "mkfs", "dd if=", "chmod -r 777 /",
+                          "rd /s", "rmdir /s"):
+            if blocked in c:
+                return True
+        return False
+
+    def _fallback_translate(self, user_message: str) -> str:
+        """Best-effort natural-language -> shell command for offline mode.
+
+        Returns a command string, or "" if we cannot safely guess one.
+        """
+        m = user_message.lower().strip()
+        if not m:
+            return ""
+
+        # Directory / file listing
+        if any(w in m for w in ["list", "files", "folder", "directory", "ls",
+                                       "dir ", "show files", "contents", "what's in",
+                                       "whats in", "open the folder", "open folder"]):
+            if _IS_WINDOWS:
+                return "Get-ChildItem -Force"
+            return "ls -la"
+        if "current directory" in m or "where am i" in m or "pwd" in m:
+            if _IS_WINDOWS:
+                return "Get-Location"
+            return "pwd"
+        if "home" in m and ("folder" in m or "files" in m or "list" in m):
+            if _IS_WINDOWS:
+                return "Get-ChildItem -Path $env:USERPROFILE -Force"
+            return "ls -la ~"
+
+        # Process listing
+        if any(w in m for w in ["process", "running", "what's running",
+                                        "whats running", "programs", "tasks"]):
+            if _IS_WINDOWS:
+                return "Get-Process | Sort-Object CPU -Descending | Select-Object -First 15 Name,CPU,WorkingSet64 | Format-Table -AutoSize"
+            return "ps aux --sort=-%mem | head -15"
+
+        # Search for a file / pattern
+        search_match = re.search(r"(?:find|search for|locate|look for)\s+(?:file\s+)?(.+)", m)
+        if search_match:
+            term = search_match.group(1).strip().strip("'\"")
+            term = re.sub(r"[^\\w.\\-~*]", "", term)
+            if term:
+                if _IS_WINDOWS:
+                    return f"Get-ChildItem -Recurse -Filter '*{term}*' -ErrorAction SilentlyContinue | Select-Object FullName"
+                return f"find . -iname '*{term}*'"
+
+        # Time / date
+            if any(w in m for w in ["time", "date", "what day", "what time"]):
+                if _IS_WINDOWS:
+                    return "Get-Date -Format 'yyyy-MM-dd HH:mm:ss dddd'"
+                return "date"
+
+        # Weather is not available offline
+        if "weather" in m or "temperature outside" in m:
+            return ""
+
+        # Anything that already looks like a real command -> pass through
+        if any(m.startswith(v) or m == v.strip() for v in
+                  ("dir", "ls", "cd", "start", "mkdir", "md", "del", "rm",
+                   "cat", "echo", "type", "powershell", "pwsh", "ps",
+                   "git", "python", "python3", "pip", "jarvis", "taskmgr",
+                   "open", "cmd", "explorer", "calc", "notepad", "code",
+                   "subl", "firefox", "chrome", "brave", "spotify", "slack",
+                   "discord", "telegram", "pycharm", "gedit", "kate",
+                   "xdg-open", "gnome", "konsole", "xterm", "amixer",
+                   "free", "df", "uname", "lscpu", "hostname", "date",
+                   "whoami", "id", "pkill", "taskkill", "curl", "wget",
+                   "net", "ipconfig", "ping", "invoke-", "get-", "set-",
+                   "new-", "select-", "where-")):
+            return user_message.strip()
+
+        return ""
+
+    @staticmethod
+    def _is_prompt_injection(text: str) -> bool:
+        """Heuristic check: return True if the LLM output looks like a prompt-injection attempt."""
+        lower = text.lower()
+        red_flags = [
+            "ignore previous",
+            "ignore all previous",
+            "ignore above",
+            "ignore all above",
+            "ignore prior",
+            "forget everything",
+            "new instructions:",
+            "system: you are now",
+            "you are now a",
+            "act as root",
+            "bypass safety",
+            "disregard instructions",
+            "override instructions",
+            "sudo ",
+            "su -",
+        ]
+        return any(flag in lower for flag in red_flags)
+
+    # A <run> block is treated as AN EXECUTABLE COMMAND by default
+    # (the model was explicitly told to only use <run> for actions).
+    # We only *reject* it when it is clearly NOT a command -- i.e.
+    # a factual question or plain prose that got wrapped by mistake.
+    _QUESTION_MARKERS = (
+        "who is", "who was", "who are", "who were",
+        "what is", "what are", "what was", "what were", "what can",
+        "what do", "what does",
+        "where is", "when is", "when did", "when was",
+        "why is", "why do", "why did", "why does",
+        "how do", "how does", "how to", "how can", "how is",
+        "tell me about", "tell me why", "explain", "describe",
+        "name the", "which is", "which are",
+    )
+
+    @staticmethod
+    def _looks_like_question(text: str) -> bool:
+        """Narrow reject-check: does this look like a question/prose, NOT a command?
+
+        We intentionally keep this NARROW (false-positives would block
+        real commands). Only reject obvious questions and sentences with
+        spaces but no shell verb / operator.
+        """
+        t = text.strip()
+        if not t:
+            return True
+        low = t.lower()
+        # Explicit question phrasing -> reject.
+        if any(low.startswith(q) for q in JarvisBrain._QUESTION_MARKERS):
+            return True
+        # Multi-word sentence with no command verb and no shell operator ->
+        # almost certainly prose the model wrapped by mistake.
+        has_operator = any(op in t for op in ("|", ">", "<", "&", ";", "&&", "||"))
+        has_path = ("\\" in t) or ("/" in t)
+        has_verb = any(low.startswith(v) or low == v.strip()
+                        for v in ("dir", "ls", "cd", "start", "mkdir", "md",
+                        "del", "rm", "cat", "echo", "type", "powershell",
+                        "pwsh", "ps", "git", "python", "python3", "pip",
+                        "jarvis", "taskmgr", "open", "cmd", "explorer",
+                        "calc", "notepad", "code", "subl", "firefox", "chrome",
+                        "brave", "spotify", "slack", "discord", "telegram",
+                        "pycharm", "gedit", "kate", "xdg-open", "gnome",
+                        "konsole", "xterm", "amixer", "free", "df", "uname",
+                        "lscpu", "hostname", "date", "whoami", "id", "pkill",
+                        "taskkill", "curl", "wget", "net", "ipconfig", "ping",
+                        "invoke-", "get-", "set-", "new-", "select-",
+                        "where-", "get-", "cd\\", "cd /"))
+        if " " in t and not has_operator and not has_path and not has_verb:
+            return True
+        return False
+
+    @staticmethod
     def extract_command(response_text: str):
-        """Extract the first <run>...</run> command from the response."""
+        """Extract the first <run>...</run> command.
+
+        By default a <run> block is trusted as an executable command.
+        We only reject it when it clearly looks like a question/prose that
+        the model wrapped by mistake (to avoid 'command not found' errors).
+        """
+        if JarvisBrain._is_prompt_injection(response_text):
+            return None
         matches = re.findall(r'<run>(.*?)</run>', response_text, re.DOTALL)
         if matches:
-            return matches[0].strip()
+            cmd = matches[0].strip()
+            # Reject only clear non-commands (questions / prose).
+            if JarvisBrain._looks_like_question(cmd):
+                return None
+            return cmd
         return None
 
     @staticmethod
@@ -1055,7 +1384,7 @@ RESPONSE FORMAT:
 # Test block
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    brain = JarvisBrain({"user": "rehan", "os": "Linux", "cwd": os.getcwd()}, debug=True)
+    brain = JarvisBrain({"user": "rehan", "os": platform.system(), "cwd": os.getcwd()}, debug=True)
 
     print("\n--- TEST 1: List directories ---")
     resp = brain.get_response("Open the directories of this folder")

@@ -1,6 +1,8 @@
 import subprocess
 import os
 import platform
+import shutil
+import re
 
 
 # ---------------------------------------------------------------------------
@@ -18,6 +20,11 @@ DANGEROUS_COMMANDS = [
     "passwd",
     "userdel", "usermod",
     "sudo rm", "sudo shutdown",
+    # Windows dangerous commands
+    "del /s", "format ", "rmdir /s", "rd /s",
+    "Remove-Item -Recurse", "Format-Volume",
+    "shutdown /s", "shutdown /r", "shutdown /f",
+    "taskkill /f /im",
 ]
 
 # Commands that should NEVER be allowed, no confirmation possible.
@@ -27,13 +34,22 @@ BLOCKED_COMMANDS = [
     "rm -rf /*",
     "mkfs /dev/sd",
     "> /dev/sda",
+    # Windows blocked commands
+    "format c:",
+    "Format-Volume -DriveLetter C",
+    "del /s /q C:\\",
 ]
 
 
 class SystemAgent:
     def __init__(self):
         self.os_name = platform.system()
-        self.shell = "/bin/bash" if self.os_name == "Linux" else None
+        if self.os_name == "Windows":
+            self.shell = shutil.which("powershell") or shutil.which("powershell.exe") or "powershell.exe"
+        elif self.os_name == "Linux":
+            self.shell = "/bin/bash"
+        else:
+            self.shell = None
         # Track cwd so "cd" commands are persistent across turns
         self._cwd = os.path.expanduser("~")
 
@@ -61,7 +77,7 @@ class SystemAgent:
         # 2. Warn about dangerous commands and require confirmation
         for danger in DANGEROUS_COMMANDS:
             if danger in command:
-                print(f"\n[JARVIS SAFETY] ⚠️  Dangerous command detected: '{command}'")
+                print(f"\n[JARVIS SAFETY] WARNING: Dangerous command detected: '{command}'")
                 try:
                     confirm = input("[JARVIS SAFETY] Type YES to confirm, or anything else to cancel: ").strip()
                 except EOFError:
@@ -101,9 +117,13 @@ class SystemAgent:
             # Truncate runaway output to avoid flooding the LLM context
             max_chars = 3000
             if len(stdout) > max_chars:
-                stdout = stdout[:max_chars] + f"\n... [Output truncated — total {len(result.stdout)} chars]"
+                stdout = stdout[:max_chars] + f"\n... [Output truncated -- total {len(result.stdout)} chars]"
             if len(stderr) > max_chars:
-                stderr = stderr[:max_chars] + f"\n... [Error truncated — total {len(result.stderr)} chars]"
+                stderr = stderr[:max_chars] + f"\n... [Error truncated -- total {len(result.stderr)} chars]"
+
+            # Redact secrets / PII before handing output to the LLM
+            stdout = self._redact_secrets(stdout)
+            stderr = self._redact_secrets(stderr)
 
             return {
                 "status": "success",
@@ -165,6 +185,44 @@ class SystemAgent:
             }
 
     # ------------------------------------------------------------------
+    # Output sanitisation helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _redact_secrets(text: str) -> str:
+        """Strip known secret patterns from command output before returning to the LLM."""
+        if not text:
+            return text
+
+        # SSH/PGP private keys — full block (BEGIN...END)
+        text = re.sub(
+            r"-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----.*?-----END (RSA |EC |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----",
+            "[REDACTED: private key]",
+            text,
+            flags=re.DOTALL,
+        )
+        # Partial key leak — BEGIN header with no matching END.
+        # Redact from the BEGIN line to end of text (safer than guessing where key data stops).
+        text = re.sub(
+            r"-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----.*",
+            "[REDACTED: private key]",
+            text,
+            flags=re.DOTALL,
+        )
+
+        # AWS access key IDs
+        text = re.sub(r"\bAKIA[0-9A-Z]{16}\b", "[REDACTED: AWS key]", text)
+
+        # Generic "password = ..." / "token = ..." / "secret = ..." style lines
+        text = re.sub(
+            r"(?i)(password|token|secret|api.?key)\s*[:=]\s*\S+",
+            r"\1 = [REDACTED]",
+            text,
+        )
+
+        return text
+
+    # ------------------------------------------------------------------
     # System info
     # ------------------------------------------------------------------
 
@@ -198,11 +256,11 @@ if __name__ == "__main__":
         print(f"  {k}: {v}")
 
     print("\nTesting simple command execution...")
-    res = agent.execute_command("echo 'Hello from JARVIS shell!' && uname -a")
+    res = agent.execute_command("echo Hello from JARVIS shell!")
     print(f"Status: {res['status']}")
     print(f"Exit Code: {res['exit_code']}")
     print(f"Stdout:\n{res['stdout']}")
 
     print("\nTesting cd command...")
-    res = agent.execute_command("cd /tmp")
+    res = agent.execute_command("cd C:\\Users")
     print(f"CWD after cd: {agent.get_cwd()}")

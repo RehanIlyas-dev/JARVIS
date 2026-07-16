@@ -1,12 +1,19 @@
 import sys
 import argparse
 import time
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 from .stt import SpeechToText
 from .tts import TextToSpeech
 from .system_agent import SystemAgent
 from .brain import JarvisBrain
 
-# Maximum LLM→command→result iterations per user turn (prevents infinite loops)
+# Maximum LLM->command->result iterations per user turn (prevents infinite loops)
 MAX_AGENTIC_ITERATIONS = 8
 
 
@@ -66,7 +73,7 @@ def run_agentic_loop(brain, system_agent, tts, user_message):
                 _safe_speak(tts, warning)
                 break
         else:
-            # No command — the response is the final answer
+            # No command - the response is the final answer
             break
 
 
@@ -89,8 +96,9 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
     STT_FAIL_THRESHOLD = 4
 
     def handle_command(command_text):
-        """Process a command and return True (always — keeps the caller clean)."""
+        """Process a command and return True (always - keeps the caller clean)."""
         if command_text:
+            tts.stop()  # interrupt any still-playing previous response
             run_agentic_loop(brain, system_agent, tts, command_text)
         return True
 
@@ -100,7 +108,7 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
         requiring the wake word.  Returns when there is a timeout (silence).
         """
         ACTIVE_SECS = 30
-        print(f"[JARVIS] Active window open — listening for follow-ups ({ACTIVE_SECS}s silence to exit)...")
+        print(f"[JARVIS] Active window open - listening for follow-ups ({ACTIVE_SECS}s silence to exit)...")
 
         while True:
             follow = stt.listen(timeout=ACTIVE_SECS, phrase_time_limit=20)
@@ -122,14 +130,14 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
                 if extra:
                     follow_lower = extra.lower().strip()
                 else:
-                    return  # No response → back to passive
+                    return  # No response -> back to passive
 
             handle_command(follow_lower)
             # Loop: keep the active window alive after every follow-up response
 
     while True:
         try:
-            # ── PASSIVE MODE: wait for wake word ──────────────────────────
+            # -- PASSIVE MODE: wait for wake word --------------------------
             heard = stt.listen(timeout=None, phrase_time_limit=10)
 
             if not heard:
@@ -145,9 +153,16 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
             heard_lower = heard.lower()
             print(f"[JARVIS STT] Heard: '{heard_lower}'")
 
-            # ── Wake-word check ───────────────────────────────────────────
+            # -- Global STOP command: interrupt any playing response ---
+            if "stop" in heard_lower.split() or heard_lower.strip().endswith("stop"):
+                tts.stop()
+                print("[JARVIS] Response stopped.")
+                _safe_speak(tts, "Understood, Sir.")
+                continue
+
+            # -- Wake-word check -------------------------------------------
             if not (wake_word in heard_lower.split() or wake_word in heard_lower):
-                # Not the wake word — ignore (passive mode)
+                # Not the wake word - ignore (passive mode)
                 continue
 
             print(f"\n[JARVIS] Wake word detected!")
@@ -159,7 +174,7 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
                 print(f"[JARVIS] Inline command: '{inline_cmd}'")
                 handle_command(inline_cmd)
             else:
-                # Just "Jarvis" alone — greet and listen
+                # Just "Jarvis" alone - greet and listen
                 _safe_speak(tts, "Yes, Sir?")
                 first_cmd = stt.listen(timeout=15, phrase_time_limit=20)
                 if first_cmd:
@@ -169,7 +184,7 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
                     _safe_speak(tts, "Apologies Sir, I didn't catch that. Returning to standby.")
                     continue  # Skip active window
 
-            # ── ACTIVE WINDOW: accept follow-ups for 30 s ─────────────────
+            # -- ACTIVE WINDOW: accept follow-ups for 30 s -----------------
             active_window()
 
         except KeyboardInterrupt:
@@ -187,7 +202,7 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
 
 def start_text_mode(tts, brain, system_agent):
     """
-    Interactive text terminal mode — useful for testing or when microphone is unavailable.
+    Interactive text terminal mode - useful for testing or when microphone is unavailable.
     """
     print(f"\n=== JARVIS Terminal Controller Active ===")
     print("Type your message. Type 'exit' or 'quit' to shut down.\n")
@@ -242,7 +257,7 @@ def main():
             print("[JARVIS] Switching to Text-Terminal mode automatically.")
             args.text = True
 
-    # 4. Initialize Brain — pass system_agent so brain always reads live cwd
+    # 4. Initialize Brain - pass system_agent so brain always reads live cwd
     brain = JarvisBrain(system_info=sys_info, system_agent=system_agent, debug=args.verbose)
 
     # 5. Start selected mode

@@ -3,6 +3,7 @@ import os
 import sys
 import time
 
+import psutil
 from flask import Flask, request, Response, render_template, jsonify
 
 from .system_agent import SystemAgent
@@ -25,44 +26,20 @@ def init_app():
         sys_info = system_agent.get_system_info()
         brain = JarvisBrain(system_info=sys_info, system_agent=system_agent)
 
-_prev_idle = 0
-_prev_total = 0
-
-
 def _get_cpu_percent():
-    global _prev_idle, _prev_total
     try:
-        with open("/proc/stat") as f:
-            parts = f.readline().split()
-        values = [int(x) for x in parts[1:]]
-        idle = values[3]
-        total = sum(values)
-        idle_diff = idle - _prev_idle
-        total_diff = total - _prev_total
-        _prev_idle = idle
-        _prev_total = total
-        if total_diff == 0:
-            return 0.0
-        return round((1 - idle_diff / total_diff) * 100, 1)
+        return psutil.cpu_percent(interval=0.1)
     except Exception:
         return 0.0
 
 
 def _get_memory_info():
     try:
-        with open("/proc/meminfo") as f:
-            lines = f.readlines()
-        info = {}
-        for line in lines:
-            parts = line.split()
-            info[parts[0].rstrip(":")] = int(parts[1]) * 1024
-        total = info.get("MemTotal", 0)
-        available = info.get("MemAvailable", 0)
-        used = total - available
+        mem = psutil.virtual_memory()
         return {
-            "total_mb": round(total / (1024 * 1024)),
-            "used_mb": round(used / (1024 * 1024)),
-            "percent": round((used / total) * 100, 1) if total else 0,
+            "total_mb": round(mem.total / (1024 * 1024)),
+            "used_mb": round(mem.used / (1024 * 1024)),
+            "percent": round(mem.percent, 1),
         }
     except Exception:
         return {"total_mb": 0, "used_mb": 0, "percent": 0}
@@ -70,14 +47,11 @@ def _get_memory_info():
 
 def _get_disk_info():
     try:
-        stat = os.statvfs("/")
-        total = stat.f_blocks * stat.f_frsize
-        free = stat.f_bavail * stat.f_frsize
-        used = total - free
+        usage = psutil.disk_usage("C:\\" if os.name == "nt" else "/")
         return {
-            "total_gb": round(total / (1024 ** 3), 1),
-            "used_gb": round(used / (1024 ** 3), 1),
-            "percent": round((used / total) * 100, 1) if total else 0,
+            "total_gb": round(usage.total / (1024 ** 3), 1),
+            "used_gb": round(usage.used / (1024 ** 3), 1),
+            "percent": round(usage.percent, 1),
         }
     except Exception:
         return {"total_gb": 0, "used_gb": 0, "percent": 0}
@@ -85,8 +59,7 @@ def _get_disk_info():
 
 def _get_uptime():
     try:
-        with open("/proc/uptime") as f:
-            secs = float(f.readline().split()[0])
+        secs = time.time() - psutil.boot_time()
         days = int(secs // 86400)
         hours = int((secs % 86400) // 3600)
         mins = int((secs % 3600) // 60)
@@ -226,13 +199,13 @@ def before_request():
 def main():
     init_app()
     _get_cpu_percent()  # prime the cpu counter
-    print(f"\n  ╔══════════════════════════════════════╗")
-    print(f"  ║     J.A.R.V.I.S.  WEB INTERFACE      ║")
-    print(f"  ╠══════════════════════════════════════╣")
-    print(f"  ║  Provider : {brain.provider:<24s}║")
-    print(f"  ║  Model    : {(brain.model_name or 'N/A'):<24s}║")
-    print(f"  ║  URL      : http://127.0.0.1:5000    ║")
-    print(f"  ╚══════════════════════════════════════╝\n")
+    print(f"\n  +--------------------------------------+")
+    print(f"  |     J.A.R.V.I.S.  WEB INTERFACE      |")
+    print(f"  +--------------------------------------+")
+    print(f"  |  Provider : {brain.provider:<24s}|")
+    print(f"  |  Model    : {(brain.model_name or 'N/A'):<24s}|")
+    print(f"  |  URL      : http://127.0.0.1:5000    |")
+    print(f"  +--------------------------------------+\n")
     app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)
 
 
