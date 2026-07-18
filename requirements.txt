@@ -1,4 +1,5 @@
 SpeechRecognition
+pyaudio
 sounddevice
 psutil
 numpy

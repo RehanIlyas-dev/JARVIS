@@ -206,7 +206,7 @@ def main():
     print(f"  |  Model    : {(brain.model_name or 'N/A'):<24s}|")
     print(f"  |  URL      : http://127.0.0.1:5000    |")
     print(f"  +--------------------------------------+\n")
-    app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

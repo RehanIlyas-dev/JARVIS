@@ -1168,27 +1168,6 @@ RESPONSE FORMAT:
                     return respond(f"I could not run that, Sir: {err}")
                 return respond("I could not run that, Sir.")
 
-        # system_agent present but nothing matched: try to translate
-        # the natural-language input into a real command and self-execute
-        # it, so we still return a spoken result instead of blindly
-        # wrapping the raw sentence as a (likely invalid) command.
-        if self.system_agent is not None:
-            translated = self._fallback_translate(user_message)
-            if translated and not self._command_is_dangerous(translated):
-                res = self.system_agent.execute_command(translated)
-                if res.get("status") == "success":
-                    out = (res.get("stdout") or "").strip()
-                    if out:
-                        return respond(out)
-                    err = (res.get("stderr") or "").strip()
-                    if err:
-                        return respond(f"Command finished with an error: {err}")
-                    return respond("Command finished, Sir.")
-                err = (res.get("stderr") or "").strip()
-                if err:
-                    return respond(f"I could not run that, Sir: {err}")
-                return respond("I could not run that, Sir.")
-
         # No system_agent available: wrap as a command and let the
         # agentic loop execute it (keeps old behaviour).
         safe_cmd = re.sub(r"[;&|`$]", "", user_message.strip())
@@ -1246,17 +1225,17 @@ RESPONSE FORMAT:
         search_match = re.search(r"(?:find|search for|locate|look for)\s+(?:file\s+)?(.+)", m)
         if search_match:
             term = search_match.group(1).strip().strip("'\"")
-            term = re.sub(r"[^\\w.\\-~*]", "", term)
+            term = re.sub(r"[^\w.\-~*]", "", term)
             if term:
                 if _IS_WINDOWS:
                     return f"Get-ChildItem -Recurse -Filter '*{term}*' -ErrorAction SilentlyContinue | Select-Object FullName"
                 return f"find . -iname '*{term}*'"
 
         # Time / date
-            if any(w in m for w in ["time", "date", "what day", "what time"]):
-                if _IS_WINDOWS:
-                    return "Get-Date -Format 'yyyy-MM-dd HH:mm:ss dddd'"
-                return "date"
+        if any(w in m for w in ["time", "date", "what day", "what time"]):
+            if _IS_WINDOWS:
+                return "Get-Date -Format 'yyyy-MM-dd HH:mm:ss dddd'"
+            return "date"
 
         # Weather is not available offline
         if "weather" in m or "temperature outside" in m:
@@ -1297,8 +1276,6 @@ RESPONSE FORMAT:
             "bypass safety",
             "disregard instructions",
             "override instructions",
-            "sudo ",
-            "su -",
         ]
         return any(flag in lower for flag in red_flags)
 

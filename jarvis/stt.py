@@ -110,6 +110,46 @@ class SpeechToText:
             print(f"[JARVIS STT] Calibration failed: {e}. Using default threshold.")
 
     # ------------------------------------------------------------------
+    # Gemini STT
+    # ------------------------------------------------------------------
+
+    def _recognize_gemini(self, audio):
+        """
+        Transcribe raw AudioData via Gemini's multimodal API.
+        Avoids the free Google Speech API's ~50 req/day quota that
+        otherwise silently breaks recognition.
+        Raises sr.UnknownValueError if no speech is recognised.
+        """
+        import google.genai as genai
+        from google.genai import types
+
+        wav_bytes = audio.get_wav_data()
+
+        client = genai.Client(api_key=self._gemini_key)
+        contents = [
+            "Transcribe this short spoken audio clip. Reply with ONLY the spoken words, "
+            "no punctuation commentary, no quotes. If there is no speech, reply with an empty string.",
+            types.Part(
+                inline_data=types.Blob(
+                    mime_type="audio/wav",
+                    data=wav_bytes,
+                )
+            ),
+        ]
+        config = types.GenerateContentConfig(
+            temperature=0.0,
+        )
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config=config,
+        )
+        text = (resp.text or "").strip()
+        if not text:
+            raise sr.UnknownValueError("Gemini returned no transcript")
+        return text
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 

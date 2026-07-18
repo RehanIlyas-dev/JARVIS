@@ -11,12 +11,16 @@ requires-python = ">=3.9"
 dependencies = [
     "SpeechRecognition",
     "pyaudio",
+    "sounddevice",
+    "psutil",
+    "numpy",
     "google-genai",
     "openai",
     "edge-tts",
     "miniaudio",
     "pydub",
-    "flask"
+    "flask",
+    "python-dotenv"
 ]
 
 [project.scripts]
