@@ -2,6 +2,7 @@ import asyncio
 import os
 import platform
 import tempfile
+from typing import Optional
 
 import miniaudio
 import sounddevice as sd
@@ -15,14 +16,15 @@ class TextToSpeech:
     Voice: en-GB-RyanNeural - British male, fits the JARVIS aesthetic perfectly.
     """
 
-    VOICE = "en-GB-RyanNeural"
-    RATE  = "+5%"   # slight speed-up; 0% is natural pace
-    PITCH = "-5Hz"  # slightly deeper for that JARVIS timbre
+    VOICE: str = "en-GB-RyanNeural"
+    RATE: str  = "+5%"   # slight speed-up; 0% is natural pace
+    PITCH: str = "-5Hz"  # slightly deeper for that JARVIS timbre
 
-    def __init__(self):
+    def __init__(self) -> None:
+        self._use_edge: bool = False
         self._verify_edge_tts()
 
-    def _verify_edge_tts(self):
+    def _verify_edge_tts(self) -> None:
         try:
             import edge_tts  # noqa: F401
             self._use_edge = True
@@ -34,7 +36,7 @@ class TextToSpeech:
     # Public API
     # ------------------------------------------------------------------
 
-    def speak(self, text: str):
+    def speak(self, text: str) -> None:
         """Speak text synchronously - blocks until audio finishes playing."""
         if not text or not text.strip():
             return
@@ -51,7 +53,7 @@ class TextToSpeech:
 
         self._speak_espeak(text)
 
-    def _speak_edge(self, text: str):
+    def _speak_edge(self, text: str) -> None:
         """Generate MP3 with edge-tts, decode with miniaudio, play via sounddevice."""
         import edge_tts
 
@@ -72,7 +74,7 @@ class TextToSpeech:
             except OSError:
                 pass
 
-    def _play_mp3(self, mp3_path: str):
+    def _play_mp3(self, mp3_path: str) -> None:
         """Decode mp3 with miniaudio and play via sounddevice."""
         decoded = miniaudio.decode_file(mp3_path)
 
@@ -85,21 +87,21 @@ class TextToSpeech:
         except Exception as e:
             print(f"[JARVIS TTS] Playback error: {e}")
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop any currently-playing audio immediately (cross-platform)."""
         try:
             sd.stop()
         except Exception:
             pass
 
-    def _speak_espeak(self, text: str):
+    def _speak_espeak(self, text: str) -> None:
         """Offline fallback: Windows SAPI on Windows, espeak-ng elsewhere."""
         if platform.system() == "Windows":
             self._speak_windows_sapi(text)
         else:
             self._speak_espeak_linux(text)
 
-    def _speak_windows_sapi(self, text: str):
+    def _speak_windows_sapi(self, text: str) -> None:
         """Windows offline fallback using SAPI via pyttsx3 or direct COM."""
         try:
             import pyttsx3
@@ -118,7 +120,7 @@ class TextToSpeech:
         except Exception as e:
             print(f"[JARVIS TTS] Windows SAPI failed: {e}. Text was: {text}")
 
-    def _speak_espeak_linux(self, text: str):
+    def _speak_espeak_linux(self, text: str) -> None:
         """Linux/macOS offline fallback using espeak-ng."""
         import subprocess
         for cmd in ["espeak-ng", "espeak"]:

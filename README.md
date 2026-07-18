@@ -19,6 +19,67 @@ JARVIS listens for a wake word, processes natural language via a large language 
 - **Text Mode** — Full functionality via keyboard if microphone is unavailable
 - **Web Interface** — Browser-based chat UI served via Flask with Iron Man HUD design
 - **Offline Fallback** — Built-in command matcher handles 50+ commands without any API key
+- **Generator-Based Agentic Loop** — Shared `generate_agentic_loop` generator drives both the TUI and web UI; each consumer wraps events in its own presentation layer (TTS+print vs. SSE)
+- **Centralised Configuration** — All hardcoded tunables (iteration limit, timeouts, history caps) live in `config.py`; no magic numbers scattered across modules
+- **Modular Architecture** — New `fallback_matcher.py` extracts offline command matching from `brain.py`; new `agentic_loop.py` extracts the LLM→command→result iteration from `main.py` and `web_app.py`
+
+---
+
+## Architecture
+
+JARVIS is organised into focused modules under the `jarvis/` package:
+
+| Module | Responsibility |
+|--------|---------------|
+| `main.py` | CLI entry point — voice-mode loop (`start_voice_mode`) and text-mode REPL (`start_text_mode`) |
+| `web_app.py` | Flask web server with SSE streaming, Iron Man HUD UI, REST API endpoints |
+| `brain.py` | `JarvisBrain` — LLM provider dispatch (Gemini / OpenAI / Ollama / fallback), conversation history, system-prompt assembly |
+| `agentic_loop.py` | **Shared generator** `generate_agentic_loop()` — yields structured events for each step of the LLM→command→result iteration. Both `main.py` and `web_app.py` consume the same generator with different side-effect handlers (TTS+print vs. SSE frames) |
+| `fallback_matcher.py` | `FallbackMatcher` — offline command matcher extracted from `brain.py`. Handles 50+ natural-language intents (git, docker, files, apps, system controls) without any API key |
+| `system_agent.py` | `SystemAgent` — safe shell execution, `cd` persistence, command output redaction, dangerous-command blocking |
+| `stt.py` | `SpeechToText` — microphone capture via PyAudio, recognition via Google Speech API or Gemini multimodal |
+| `tts.py` | `TextToSpeech` — high-quality edge-tts voice synthesis with miniaudio decoding and sounddevice playback |
+| `config.py` | **Single source of truth** for hardcoded tunables — `MAX_AGENTIC_ITERATIONS`, `ACTIVE_SECS`, `STT_FAIL_THRESHOLD`, `HISTORY_LIMIT`, `FLASK_HOST/PORT`, etc. |
+
+### Generator Pattern
+
+The `agentic_loop.py` generator decouples the agentic loop logic from the presentation layer:
+
+```
+main.py / web_app.py
+    │
+    ▼
+generate_agentic_loop(brain, system_agent, user_message)
+    │
+    ▼  (yields event dicts)
+    ├── {"type": "status", "state": "thinking", ...}
+    ├── {"type": "assistant_response", "content": "...", ...}
+    ├── {"type": "command", "content": "...", ...}
+    ├── {"type": "command_output", "status": "...", "stdout": "...", ...}
+    ├── {"type": "done"}
+    └── {"type": "error", "content": "..."}
+```
+
+- **`main.py`** iterates the generator, prints responses to the terminal, and feeds them through `tts.speak()`.
+- **`web_app.py`** iterates the same generator and wraps every event in a Server-Sent Event (`text/event-stream`) for the browser UI.
+
+The loop itself caps at `MAX_AGENTIC_ITERATIONS` (configurable in `config.py`) to prevent infinite command chains.
+
+### Offline Fallback Flow
+
+When no API key is set (or the API call fails), `JarvisBrain` delegates to `FallbackMatcher`:
+
+```
+get_response(user_message)
+    │
+    ├── provider == "fallback" → FallbackMatcher.get_response()
+    │       │
+    │       ├── Known intent? → Return spoken response with optional <run> command
+    │       ├── Unknown + system_agent? → _translate() to shell command, execute, return output
+    │       └── Unknown + no agent? → Polite "don't understand" message
+    │
+    └── provider == LLM → API call → API fails? → FallbackMatcher.get_response()
+```
 
 ---
 
