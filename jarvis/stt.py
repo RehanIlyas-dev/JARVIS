@@ -109,6 +109,12 @@ class SpeechToText:
         except Exception as e:
             print(f"[JARVIS STT] Calibration failed: {e}. Using default threshold.")
 
+    def reset(self):
+        """Re-calibrate the microphone and reset the recognizer state."""
+        print("[JARVIS STT] Resetting microphone...")
+        self._mic_index = self._find_best_mic()
+        self._calibrate()
+
     # ------------------------------------------------------------------
     # Gemini STT
     # ------------------------------------------------------------------

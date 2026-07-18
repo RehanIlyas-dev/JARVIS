@@ -39,6 +39,12 @@ def run_agentic_loop(brain, system_agent, tts, user_message):
         # 1. Get thought / command from Brain
         response = brain.get_response(current_message)
 
+        if not response or not response.strip():
+            fallback = "I did not get a response, Sir. Please try again."
+            print(f"\n[JARVIS] {fallback}")
+            _safe_speak(tts, fallback)
+            break
+
         # 2. Extract any system command enclosed in <run>...</run>
         cmd_to_run = brain.extract_command(response)
 
@@ -57,11 +63,13 @@ def run_agentic_loop(brain, system_agent, tts, user_message):
 
             # Format execution result for the brain's next turn
             result_formatted = (
-                f"[System Execution Result: status={exec_result['status']}, "
-                f"exit_code={exec_result['exit_code']}, "
-                f"stdout='{exec_result['stdout']}', "
-                f"stderr='{exec_result['stderr']}']\n"
-                f"Current working directory is now: {system_agent.get_cwd()}"
+                f"[System Execution Result]\n"
+                f"Status: {exec_result['status']}\n"
+                f"Exit Code: {exec_result['exit_code']}\n"
+                f"STDOUT:\n{exec_result['stdout']}\n"
+                f"STDERR:\n{exec_result['stderr']}\n"
+                f"[/System Execution Result]\n"
+                f"CWD: {system_agent.get_cwd()}"
             )
 
             print(f"[JARVIS System] Command finished with exit code {exec_result['exit_code']}.")
@@ -95,11 +103,17 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
     consecutive_stt_fails = 0
     STT_FAIL_THRESHOLD = 4
 
+    def _settle_audio():
+        """Let the audio system settle after playback before opening mic."""
+        import time
+        time.sleep(0.3)
+
     def handle_command(command_text):
         """Process a command and return True (always - keeps the caller clean)."""
         if command_text:
-            tts.stop()  # interrupt any still-playing previous response
+            tts.stop()
             run_agentic_loop(brain, system_agent, tts, command_text)
+            _settle_audio()
         return True
 
     def active_window():
@@ -126,14 +140,14 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
 
             if not follow_lower:
                 _safe_speak(tts, "Yes Sir?")
+                _settle_audio()
                 extra = stt.listen(timeout=15, phrase_time_limit=20)
                 if extra:
                     follow_lower = extra.lower().strip()
                 else:
-                    return  # No response -> back to passive
+                    return
 
             handle_command(follow_lower)
-            # Loop: keep the active window alive after every follow-up response
 
     while True:
         try:
@@ -145,8 +159,10 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
                 if consecutive_stt_fails == STT_FAIL_THRESHOLD:
                     _safe_speak(tts, "Sir, I am having trouble understanding your speech. "
                                "Please check your microphone or speak more clearly.")
+                    stt.reset()
                 elif consecutive_stt_fails > STT_FAIL_THRESHOLD and consecutive_stt_fails % 8 == 0:
                     _safe_speak(tts, "Still having trouble with speech recognition, Sir.")
+                    stt.reset()
                 continue
 
             consecutive_stt_fails = 0

@@ -39,7 +39,7 @@ desktop.ini
 *.swp
 *.swo
 *~
-
+.opencode
 # ── Build & Distribution ──────────────────────
 dist/
 build/

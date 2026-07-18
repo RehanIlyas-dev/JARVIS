@@ -289,18 +289,17 @@ RESPONSE FORMAT:
 
         # If this is a system execution result being fed back, just summarize it
         # and stop - do NOT try to match commands against the result output.
-        if "[system execution result" in msg_lower:
+        if "[system execution result]" in msg_lower:
             # Extract useful info from the result
-            stdout_match = re.search(r"stdout='(.*?)'", user_message, re.DOTALL)
-            stderr_match = re.search(r"stderr='(.*?)'", user_message, re.DOTALL)
-            status_match = re.search(r"status=(\w+)", user_message)
+            stdout_match = re.search(r"STDOUT:\n(.*?)\n\[/System Execution Result\]", user_message, re.DOTALL)
+            stderr_match = re.search(r"STDERR:\n(.*?)\n\[/System Execution Result\]", user_message, re.DOTALL)
+            status_match = re.search(r"Status: (\w+)", user_message)
 
             stdout = stdout_match.group(1).strip() if stdout_match else ""
             stderr = stderr_match.group(1).strip() if stderr_match else ""
             status = status_match.group(1) if status_match else "unknown"
 
             if status == "success" and stdout:
-                # Return the raw output - no <run> tag, so the loop stops
                 return respond(stdout)
             elif stderr:
                 return respond(f"Command completed with an error: {stderr}")
