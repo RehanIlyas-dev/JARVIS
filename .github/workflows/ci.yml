@@ -18,6 +18,9 @@ jobs:
           python-version: "3.12"
       - name: Check syntax
         run: |
+          python3 -m py_compile jarvis/config.py
+          python3 -m py_compile jarvis/agentic_loop.py
+          python3 -m py_compile jarvis/fallback_matcher.py
           python3 -m py_compile jarvis/brain.py
           python3 -m py_compile jarvis/system_agent.py
           python3 -m py_compile jarvis/main.py
@@ -40,8 +43,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install test deps
-        run: pip install pytest python-dotenv
+      - name: Install project and test deps
+        run: pip install -e . pytest python-dotenv
       - name: Run cross-platform tests
         run: python -m pytest tests/ -v -s --tb=short
 
