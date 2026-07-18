@@ -316,9 +316,11 @@ class TestSystemAgentRealExecution:
         assert result["status"] == "error"
         assert result["exit_code"] == 1
 
-    def test_long_output_truncation(self, agent):
+    def test_long_output_truncation(self, agent, tmp_path):
         """Output longer than 3000 chars is truncated."""
-        result = agent.execute_command(f"{sys.executable} -c \"print('x' * 5000)\"")
+        script_path = tmp_path / "long_output.py"
+        script_path.write_text("print('x' * 5000)\n", encoding="utf-8")
+        result = agent.execute_command(f"\"{sys.executable}\" \"{script_path}\"")
         assert result["status"] == "success"
         assert len(result["stdout"]) <= 3100  # 3000 + truncation message
         assert "Output truncated" in result["stdout"]
