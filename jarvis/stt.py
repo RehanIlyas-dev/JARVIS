@@ -1,11 +1,18 @@
 import os
-import speech_recognition as sr
+import platform
+import sys
+from typing import Optional
 
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except Exception:
     pass
+
+try:
+    import speech_recognition as sr
+except ImportError:
+    sr = None  # type: ignore[assignment]
 
 
 class SpeechToText:
@@ -26,11 +33,11 @@ class SpeechToText:
     - Cleaner error messages.
     """
 
-    def __init__(self):
-        self.recognizer = sr.Recognizer()
+    def __init__(self) -> None:
+        self.recognizer: sr.Recognizer = sr.Recognizer()
         # Gemini STT is preferred (no quota). Uses the same key as the brain.
-        self._gemini_key = os.environ.get("GEMINI_API_KEY")
-        self._use_gemini = bool(self._gemini_key)
+        self._gemini_key: Optional[str] = os.environ.get("GEMINI_API_KEY")
+        self._use_gemini: bool = bool(self._gemini_key)
         if self._use_gemini:
             print("[JARVIS STT] Using Gemini speech recognition (no daily quota).")
         else:
@@ -45,21 +52,20 @@ class SpeechToText:
         self.recognizer.phrase_threshold = 0.3  # Minimum seconds of speech before a phrase is registered
         self.recognizer.non_speaking_duration = 0.5  # Max seconds of non-speaking allowed before phrase ends
 
-        self._mic_index = self._find_best_mic()
-        self._calibrated = False
+        self._mic_index: Optional[int] = self._find_best_mic()
+        self._calibrated: bool = False
         self._calibrate()
 
     # ------------------------------------------------------------------
     # Device selection
     # ------------------------------------------------------------------
 
-    def _find_best_mic(self):
+    def _find_best_mic(self) -> Optional[int]:
         """
         Pick the best input device index.
         On Windows, use the OS default microphone (no device_index needed).
         On Linux, prefer PulseAudio 'pulse' device.
         """
-        import platform
         if platform.system() == "Windows":
             print("[JARVIS STT] Using default Windows microphone.")
             return None
@@ -90,7 +96,7 @@ class SpeechToText:
     # Calibration
     # ------------------------------------------------------------------
 
-    def _calibrate(self):
+    def _calibrate(self) -> None:
         """
         Calibrate the energy threshold once by sampling ambient noise for 1 second.
         Called at startup only.
@@ -109,7 +115,7 @@ class SpeechToText:
         except Exception as e:
             print(f"[JARVIS STT] Calibration failed: {e}. Using default threshold.")
 
-    def reset(self):
+    def reset(self) -> None:
         """Re-calibrate the microphone and reset the recognizer state."""
         print("[JARVIS STT] Resetting microphone...")
         self._mic_index = self._find_best_mic()
@@ -119,7 +125,7 @@ class SpeechToText:
     # Gemini STT
     # ------------------------------------------------------------------
 
-    def _recognize_gemini(self, audio):
+    def _recognize_gemini(self, audio: sr.AudioData) -> str:
         """
         Transcribe raw AudioData via Gemini's multimodal API.
         Avoids the free Google Speech API's ~50 req/day quota that
@@ -159,7 +165,7 @@ class SpeechToText:
     # Public API
     # ------------------------------------------------------------------
 
-    def listen(self, timeout=None, phrase_time_limit=None):
+    def listen(self, timeout: Optional[float] = None, phrase_time_limit: Optional[float] = None) -> Optional[str]:
         """
         Block until a phrase is spoken, then return the recognised text (or None).
 
