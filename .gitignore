@@ -10,7 +10,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyo
-
+.benchmarks
 # ── API Keys & Secrets ────────────────────────
 .env
 .env.*
@@ -26,7 +26,7 @@ jarvis_screenshot.png
 # ── Logs ──────────────────────────────────────
 *.log
 logs/
-
+opencode.json
 # ── OS Junk ───────────────────────────────────
 .DS_Store
 Thumbs.db
