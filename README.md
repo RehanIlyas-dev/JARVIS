@@ -106,25 +106,7 @@ pip install -e ".[dev]"
 
 Then run with `./run.sh` (Linux/macOS) or `run.bat` (Windows).
 
-#### Per-platform audio setup
-
-**Linux (Debian / Ubuntu):**
-```bash
-sudo apt install libportaudio2
-```
-
-**macOS:**
-```bash
-brew install portaudio
-```
-
-**Windows:**
-```powershell
-pip install pipwin
-pipwin install pyaudio
-```
-
-> **If `pipwin install pyaudio` fails**, download the wheel from [https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio) and install it manually:
+> **If `pipwin install pyaudio` fails on Windows**, download the wheel from [https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio) and install it manually:
 > ```powershell
 > pip install path\to\PyAudio‑*.whl
 > ```
@@ -163,7 +145,8 @@ To persist the key:
 ### Voice Mode (Terminal)
 
 ```bash
-./run.sh
+jarvis                    # if installed via pip
+./run.sh                  # if installed from source
 ```
 
 1. JARVIS boots, calibrates the microphone, and announces readiness.
@@ -179,7 +162,8 @@ To persist the key:
 ### Text Mode
 
 ```bash
-./run.sh --text
+jarvis --text             # if installed via pip
+./run.sh --text           # if installed from source
 ```
 
 Type commands at the prompt. JARVIS speaks and prints each response. Type `exit` or `quit` to shut down.
@@ -187,7 +171,8 @@ Type commands at the prompt. JARVIS speaks and prints each response. Type `exit`
 ### Web Interface
 
 ```bash
-./run_web.sh
+jarvis-web                # if installed via pip
+./run_web.sh              # if installed from source
 ```
 
 Opens a browser-based chat interface at `http://127.0.0.1:8080` featuring an Iron Man HUD design with real-time system monitoring, voice control, and TTS output. The web UI uses an **always-on microphone** with wake word detection — say "JARVIS" once, then issue commands freely.
@@ -195,7 +180,8 @@ Opens a browser-based chat interface at `http://127.0.0.1:8080` featuring an Iro
 ### Debug Mode
 
 ```bash
-./run.sh --verbose
+jarvis --verbose          # if installed via pip
+./run.sh --verbose        # if installed from source
 ```
 
 Prints full LLM responses and tracebacks to the terminal.
@@ -242,11 +228,10 @@ Any safe shell command typed directly also works (e.g., `ls -la`). Destructive c
 sudo apt install libportaudio2
 
 # Verify microphone visibility
-source venv/bin/activate
 python -c "import speech_recognition as sr; print(sr.Microphone.list_microphone_names())"
 
 # Fallback to text mode
-./run.sh --text
+jarvis --text
 ```
 
 ### No audio output
@@ -399,10 +384,20 @@ Every push and pull request triggers **GitHub Actions** (`.github/workflows/ci.y
 | **publish** | ubuntu (tags only) | On `v*` tags: builds, publishes to PyPI, and creates a GitHub Release with release notes |
 
 To trigger a release:
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
+
+1. Bump the version in `pyproject.toml`:
+   ```bash
+   # Change: version = "1.0.0"  →  version = "1.1.0"
+   ```
+2. Commit, tag, and push:
+   ```bash
+   git add pyproject.toml
+   git commit -m "Bump version to 1.1.0"
+   git tag v1.1.0
+   git push origin main --follow-tags
+   ```
+
+That's it. CI runs lint + test + build, then publishes the new version to PyPI. Your users run `pip install --upgrade jarvis` to get it.
 
 The `publish` job requires a `PYPI_API_TOKEN` secret in your GitHub repository settings. Without it, the build step still runs but publishing is skipped.
 
