@@ -7,6 +7,7 @@ provider when configured.
 
 import sys
 import os
+import platform
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -62,8 +63,8 @@ class TestFallbackDelegation:
     def test_fallback_matcher_is_initialized(self, brain):
         """Brain initializes FallbackMatcher with correct parameters."""
         assert isinstance(brain.fallback_matcher, FallbackMatcher)
-        assert brain.fallback_matcher._IS_WINDOWS is False
-        assert brain.fallback_matcher._IS_MAC is False
+        assert brain.fallback_matcher._IS_WINDOWS is (platform.system() == "Windows")
+        assert brain.fallback_matcher._IS_MAC is (platform.system() == "Darwin")
 
     def test_get_response_returns_string(self, brain):
         """get_response should always return a string."""

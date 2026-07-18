@@ -15,6 +15,7 @@ Tests verify that components work together end-to-end:
 import json
 import sys
 import os
+import platform
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -327,7 +328,7 @@ class TestSystemAgentRealExecution:
         assert "user" in info
         assert "cwd" in info
         assert "architecture" in info
-        assert info["os"] == "Linux"  # We're running on Linux
+        assert info["os"] == platform.system()  # e.g. Linux, Darwin, Windows
 
     def test_get_cwd(self, agent):
         """get_cwd returns the current working directory."""
@@ -335,9 +336,12 @@ class TestSystemAgentRealExecution:
         assert isinstance(cwd, str)
         assert os.path.isabs(cwd)
 
-    def test_shell_is_bash_on_linux(self, agent):
-        """On Linux, the shell should be /bin/bash."""
-        assert agent.shell == "/bin/bash"
+    def test_shell_is_reasonable(self, agent):
+        """Shell should be /bin/bash on Linux, /bin/zsh on macOS."""
+        if platform.system() == "Darwin":
+            assert agent.shell == "/bin/zsh"
+        else:
+            assert agent.shell == "/bin/bash"
 
 
 # ===================================================================
@@ -429,7 +433,7 @@ class TestAgenticLoopWithRealSystemAgent:
         out = [e for e in events if e["type"] == "command_output"]
         assert out[0]["status"] == "success"
         assert out[0]["exit_code"] == 0
-        assert "/home" in out[0]["stdout"] or "/tmp" in out[0]["stdout"]
+        assert real_agent.get_cwd() in out[0]["stdout"]
 
     def test_failing_command_through_loop(self, real_agent):
         """Generator handles a failing command gracefully."""
@@ -838,8 +842,8 @@ class TestBrainFallbackMatcherDelegation:
         from jarvis.fallback_matcher import FallbackMatcher
 
         assert isinstance(brain.fallback_matcher, FallbackMatcher)
-        assert brain.fallback_matcher._IS_WINDOWS is False
-        assert brain.fallback_matcher._IS_MAC is False
+        assert brain.fallback_matcher._IS_WINDOWS is (platform.system() == "Windows")
+        assert brain.fallback_matcher._IS_MAC is (platform.system() == "Darwin")
 
     def test_fallback_delegation_greeting(self, brain):
         """Brain delegates greeting to fallback matcher."""
