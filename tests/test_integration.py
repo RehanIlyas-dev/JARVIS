@@ -80,6 +80,8 @@ class TestFullAgenticLoopPipeline:
             debug=False,
         )
         brain.provider = "fallback"
+        brain._IS_WINDOWS = False
+        brain._IS_MAC = False
         brain.fallback_matcher = fallback_matcher
         return brain
 
@@ -241,8 +243,8 @@ class TestSystemAgentRealExecution:
         assert result["stdout"]  # Should contain a path
 
     def test_multiple_commands(self, agent):
-        """SystemAgent can run chained commands with &&."""
-        result = agent.execute_command("echo 'first' && echo 'second'")
+        """SystemAgent can run chained commands with ;."""
+        result = agent.execute_command("echo first; echo second")
         assert result["status"] == "success"
         assert result["exit_code"] == 0
         assert "first" in result["stdout"]
@@ -316,7 +318,7 @@ class TestSystemAgentRealExecution:
 
     def test_long_output_truncation(self, agent):
         """Output longer than 3000 chars is truncated."""
-        result = agent.execute_command("python3 -c \"print('x' * 5000)\"")
+        result = agent.execute_command(f"{sys.executable} -c \"print('x' * 5000)\"")
         assert result["status"] == "success"
         assert len(result["stdout"]) <= 3100  # 3000 + truncation message
         assert "Output truncated" in result["stdout"]
@@ -337,9 +339,13 @@ class TestSystemAgentRealExecution:
         assert os.path.isabs(cwd)
 
     def test_shell_is_reasonable(self, agent):
-        """Shell should be /bin/bash on Linux, /bin/zsh on macOS."""
-        if platform.system() == "Darwin":
+        """Shell should be reasonable for the platform."""
+        sys_name = platform.system()
+        if sys_name == "Darwin":
             assert agent.shell == "/bin/zsh"
+        elif sys_name == "Windows":
+            assert agent.shell is not None
+            assert "powershell" in agent.shell.lower()
         else:
             assert agent.shell == "/bin/bash"
 
@@ -861,6 +867,8 @@ class TestBrainFallbackMatcherDelegation:
 
     def test_fallback_delegation_list_files(self, brain):
         """Brain delegates 'list files' to fallback matcher."""
+        brain._IS_WINDOWS = False
+        brain._IS_MAC = False
         resp = brain.get_response("list files")
         assert "<run>" in resp
         assert "ls -la" in resp
@@ -933,6 +941,8 @@ class TestBrainFallbackMatcherDelegation:
 
     def test_brain_extract_command_after_fallback(self, brain):
         """After fallback response, extract_command finds the <run> tag."""
+        brain._IS_WINDOWS = False
+        brain._IS_MAC = False
         resp = brain.get_response("list files")
         cmd = brain.extract_command(resp)
         assert cmd == "ls -la"
@@ -1064,13 +1074,13 @@ class TestCrossCuttingIntegration:
         agent = SystemAgent()
         fm = FallbackMatcher(add_to_history=add, system_agent=agent, is_windows=False, is_mac=False)
 
-        # Translate "echo Hello World" to a command and execute it
-        cmd = fm._translate("echo Hello World")
-        assert cmd == "echo Hello World"
+        # Translate "echo HelloWorld" to a command and execute it
+        cmd = fm._translate("echo HelloWorld")
+        assert cmd == "echo HelloWorld"
 
         result = agent.execute_command(cmd)
         assert result["status"] == "success"
-        assert "Hello World" in result["stdout"]
+        assert "HelloWorld" in result["stdout"]
 
     def test_full_pipeline_unknown_to_execution(self):
         """Unknown input flows through: _translate → execute → respond."""
