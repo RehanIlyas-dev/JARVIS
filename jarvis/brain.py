@@ -9,6 +9,7 @@ except Exception:
     pass
 
 _IS_WINDOWS = (platform.system() == "Windows")
+_IS_MAC = (platform.system() == "Darwin")
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,9 @@ class JarvisBrain:
         self.client = None
         self.model_name = None
         self.conversation_history = []
+        # Platform flags as instance attributes for testability / overriding
+        self._IS_WINDOWS = _IS_WINDOWS
+        self._IS_MAC = _IS_MAC
 
         self._setup_client()
         self.system_prompt = self._build_system_prompt()
@@ -130,6 +134,9 @@ class JarvisBrain:
         os_name   = self.system_info.get("os", "Linux")
         cwd       = self._live_cwd()
         cwd_listing = self._get_directory_listing(cwd)
+        # Use instance platform flags so tests can override them
+        _IS_WINDOWS = self._IS_WINDOWS
+        _IS_MAC = self._IS_MAC
 
         # NOTE: We intentionally do NOT include home directory listing here
         # to avoid leaking potentially sensitive filenames to the cloud API.
@@ -281,6 +288,9 @@ RESPONSE FORMAT:
 
     def _simulate_fallback(self, user_message: str) -> str:
         msg_lower = user_message.lower().strip()
+        # Use instance platform flags so tests can override them
+        _IS_WINDOWS = self._IS_WINDOWS
+        _IS_MAC = self._IS_MAC
 
         def respond(text):
             self._add_to_history("user", user_message)
@@ -291,18 +301,21 @@ RESPONSE FORMAT:
         # and stop - do NOT try to match commands against the result output.
         if "[system execution result]" in msg_lower:
             # Extract useful info from the result
-            stdout_match = re.search(r"STDOUT:\n(.*?)\n\[/System Execution Result\]", user_message, re.DOTALL)
+            stdout_match = re.search(r"STDOUT:\n(.*?)\nSTDERR:", user_message, re.DOTALL)
             stderr_match = re.search(r"STDERR:\n(.*?)\n\[/System Execution Result\]", user_message, re.DOTALL)
             status_match = re.search(r"Status: (\w+)", user_message)
+            exit_code_match = re.search(r"Exit Code: (-?\d+)", user_message)
 
             stdout = stdout_match.group(1).strip() if stdout_match else ""
             stderr = stderr_match.group(1).strip() if stderr_match else ""
             status = status_match.group(1) if status_match else "unknown"
+            exit_code = int(exit_code_match.group(1)) if exit_code_match else 0
 
-            if status == "success" and stdout:
+            if status == "success" and exit_code == 0 and stdout:
                 return respond(stdout)
-            elif stderr:
-                return respond(f"Command completed with an error: {stderr}")
+            elif stderr or (status == "success" and exit_code != 0):
+                error_text = stderr or f"Command exited with code {exit_code}"
+                return respond(f"Command completed with an error: {error_text}")
             else:
                 return respond("Command completed, Sir.")
 
@@ -314,6 +327,29 @@ RESPONSE FORMAT:
             if _IS_WINDOWS:
                 return respond("Checking the weather forecast, Sir. <run>(Invoke-WebRequest -Uri 'https://wttr.in?format=3' -UseBasicParsing).Content</run>")
             return respond("Checking the weather forecast, Sir. <run>curl -s wttr.in?format=3 || curl -s wttr.in</run>")
+
+        # --- Create Folder (checked before generic listing so "create folder X" isn't caught by "folder") ---
+        if "create folder" in msg_lower or "make directory" in msg_lower or "new folder" in msg_lower:
+            raw = msg_lower
+            for phrase in ["create folder", "make directory", "create a folder", "new folder"]:
+                raw = raw.replace(phrase, "")
+            folder_name = re.sub(r"[^\w.\-]", "_", raw.strip().strip("called").strip("named").strip()).strip("_")
+            if folder_name:
+                if _IS_WINDOWS:
+                    return respond(f"Creating folder {folder_name}, Sir. <run>mkdir {folder_name}</run>")
+                return respond(f"Creating folder {folder_name}, Sir. <run>mkdir -p {folder_name}; echo 'Created {folder_name}'</run>")
+            else:
+                return respond("What would you like to name the folder, Sir?")
+
+        # --- Search (checked before generic listing so "search for python files" isn't caught by "files") ---
+        if any(w in msg_lower for w in ["search", "find"]):
+            search_term = re.sub(r"[^\w.\-]", "", msg_lower.replace("search", "").replace("find", "").replace("for", "").strip())
+            if search_term:
+                if _IS_WINDOWS:
+                    return respond(f"Searching for {search_term}, Sir. <run>Get-ChildItem -Recurse -Filter '*{search_term}*' -ErrorAction SilentlyContinue | Select-Object FullName</run>")
+                return respond(f"Searching for {search_term}, Sir. <run>find . -iname '*{search_term}*' -maxdepth 3 2>/dev/null</run>")
+            else:
+                return respond("What would you like me to search for, Sir?")
 
         # --- Directory Listings and Paths ---
         if any(w in msg_lower for w in ["list", "folder", "directory", "directories", "files", "what's in", "what is in"]):
@@ -350,7 +386,7 @@ RESPONSE FORMAT:
             return respond("Navigating to Desktop, Sir. <run>cd ~/Desktop</run>")
 
         # --- File Actions ---
-        if "read file" in msg_lower or "show file" in msg_lower or "cat file" in msg_lower or ("open file" in msg_lower and not any(w in msg_lower for w in ["manager", "folder"])):
+        if "read file" in msg_lower or "show file" in msg_lower or "cat file" in msg_lower or ("open file" in msg_lower and not any(w in msg_lower for w in ["manager", "folder", "files"])):
             raw = msg_lower
             for phrase in ["read file", "show file", "cat file", "open file", "read", "show"]:
                 raw = raw.replace(phrase, "")
@@ -376,27 +412,6 @@ RESPONSE FORMAT:
                 return respond(f"Removing file {file_name} with confirmation prompt, Sir. <run>rm -i {file_name}</run>")
             else:
                 return respond("Which file would you like me to delete, Sir?")
-
-        if "create folder" in msg_lower or "make directory" in msg_lower or "new folder" in msg_lower:
-            raw = msg_lower
-            for phrase in ["create folder", "make directory", "create a folder", "new folder"]:
-                raw = raw.replace(phrase, "")
-            folder_name = re.sub(r"[^\w.\-]", "_", raw.strip().strip("called").strip("named").strip()).strip("_")
-            if folder_name:
-                if _IS_WINDOWS:
-                    return respond(f"Creating folder {folder_name}, Sir. <run>mkdir {folder_name}</run>")
-                return respond(f"Creating folder {folder_name}, Sir. <run>mkdir -p {folder_name}; echo 'Created {folder_name}'</run>")
-            else:
-                return respond("What would you like to name the folder, Sir?")
-
-        if any(w in msg_lower for w in ["search", "find"]):
-            search_term = re.sub(r"[^\w.\-]", "", msg_lower.replace("search", "").replace("find", "").replace("for", "").strip())
-            if search_term:
-                if _IS_WINDOWS:
-                    return respond(f"Searching for {search_term}, Sir. <run>Get-ChildItem -Recurse -Filter '*{search_term}*' -ErrorAction SilentlyContinue | Select-Object FullName</run>")
-                return respond(f"Searching for {search_term}, Sir. <run>find . -iname '*{search_term}*' -maxdepth 3 2>/dev/null</run>")
-            else:
-                return respond("What would you like me to search for, Sir?")
 
         # --- Kill / Stop Processes ---
         if any(w in msg_lower for w in ["kill", "stop", "close", "terminate"]):
@@ -425,79 +440,109 @@ RESPONSE FORMAT:
         if any(w in msg_lower for w in ["firefox", "browser", "internet"]):
             if _IS_WINDOWS:
                 return respond("Launching Firefox in the background, Sir. <run>start firefox</run>")
+            elif _IS_MAC:
+                return respond("Launching Firefox, Sir. <run>open -a Firefox</run>")
             return respond("Launching Firefox in the background, Sir. <run>firefox &</run>")
 
         if any(w in msg_lower for w in ["chrome", "google chrome"]):
             if _IS_WINDOWS:
                 return respond("Launching Google Chrome, Sir. <run>start chrome</run>")
+            elif _IS_MAC:
+                return respond("Launching Google Chrome, Sir. <run>open -a 'Google Chrome'</run>")
             return respond("Launching Google Chrome, Sir. <run>google-chrome & || google-chrome-stable &</run>")
 
         if "brave" in msg_lower:
             if _IS_WINDOWS:
                 return respond("Launching Brave Browser, Sir. <run>start brave</run>")
+            elif _IS_MAC:
+                return respond("Launching Brave Browser, Sir. <run>open -a 'Brave Browser'</run>")
             return respond("Launching Brave Browser, Sir. <run>brave-browser &</run>")
 
         # --- Launching Code Editors ---
         if any(w in msg_lower for w in ["vscode", "vs code", "open code"]):
             if _IS_WINDOWS:
                 return respond("Opening Visual Studio Code, Sir. <run>start code</run>")
+            elif _IS_MAC:
+                return respond("Opening Visual Studio Code, Sir. <run>open -a 'Visual Studio Code' .</run>")
             return respond("Opening Visual Studio Code, Sir. <run>code . &</run>")
 
         if "sublime" in msg_lower:
             if _IS_WINDOWS:
                 return respond("Opening Sublime Text, Sir. <run>start subl</run>")
+            elif _IS_MAC:
+                return respond("Opening Sublime Text, Sir. <run>open -a 'Sublime Text'</run>")
             return respond("Opening Sublime Text, Sir. <run>subl &</run>")
 
         if "pycharm" in msg_lower:
             if _IS_WINDOWS:
                 return respond("Opening PyCharm, Sir. <run>start pycharm</run>")
+            elif _IS_MAC:
+                return respond("Opening PyCharm, Sir. <run>open -a PyCharm</run>")
             return respond("Opening PyCharm, Sir. <run>pycharm &</run>")
 
         # --- Launching Productivity & Chat Apps ---
         if "slack" in msg_lower:
             if _IS_WINDOWS:
                 return respond("Launching Slack, Sir. <run>start slack</run>")
+            elif _IS_MAC:
+                return respond("Launching Slack, Sir. <run>open -a Slack</run>")
             return respond("Launching Slack, Sir. <run>slack &</run>")
 
         if "discord" in msg_lower:
             if _IS_WINDOWS:
                 return respond("Opening Discord, Sir. <run>start discord</run>")
+            elif _IS_MAC:
+                return respond("Opening Discord, Sir. <run>open -a Discord</run>")
             return respond("Opening Discord, Sir. <run>discord &</run>")
 
         if "telegram" in msg_lower:
             if _IS_WINDOWS:
                 return respond("Opening Telegram, Sir. <run>start telegram</run>")
+            elif _IS_MAC:
+                return respond("Opening Telegram, Sir. <run>open -a Telegram</run>")
             return respond("Opening Telegram, Sir. <run>telegram-desktop &</run>")
 
         if any(w in msg_lower for w in ["spotify", "music"]):
             if _IS_WINDOWS:
                 return respond("Opening Spotify, Sir. <run>start spotify</run>")
+            elif _IS_MAC:
+                return respond("Opening Spotify, Sir. <run>open -a Spotify</run>")
             return respond("Opening Spotify, Sir. <run>spotify &</run>")
 
         # --- Launching System Utilities ---
         if any(w in msg_lower for w in ["terminal", "console"]):
             if _IS_WINDOWS:
                 return respond("Opening a terminal window, Sir. <run>powershell -NoExit</run>")
+            elif _IS_MAC:
+                return respond("Opening a terminal window, Sir. <run>open -a Terminal</run>")
             return respond("Opening a terminal window, Sir. <run>gnome-terminal & || konsole & || xterm &</run>")
 
         if any(w in msg_lower for w in ["file manager", "open files"]):
             if _IS_WINDOWS:
                 return respond("Opening the file manager, Sir. <run>explorer .</run>")
+            elif _IS_MAC:
+                return respond("Opening the file manager, Sir. <run>open .</run>")
             return respond("Opening the file manager, Sir. <run>xdg-open . &</run>")
 
         if any(w in msg_lower for w in ["calculator", "calc"]):
             if _IS_WINDOWS:
                 return respond("Opening the calculator, Sir. <run>calc</run>")
+            elif _IS_MAC:
+                return respond("Opening the calculator, Sir. <run>open -a Calculator</run>")
             return respond("Opening the calculator, Sir. <run>gnome-calculator & || kcalc &</run>")
 
         if any(w in msg_lower for w in ["system monitor", "task manager"]):
             if _IS_WINDOWS:
                 return respond("Opening Task Manager, Sir. <run>taskmgr</run>")
+            elif _IS_MAC:
+                return respond("Opening Activity Monitor, Sir. <run>open -a 'Activity Monitor'</run>")
             return respond("Opening System Monitor, Sir. <run>gnome-system-monitor &</run>")
 
         if any(w in msg_lower for w in ["notepad", "text editor", "gedit", "kate"]):
             if _IS_WINDOWS:
                 return respond("Opening Notepad, Sir. <run>notepad</run>")
+            elif _IS_MAC:
+                return respond("Opening TextEdit, Sir. <run>open -a TextEdit</run>")
             return respond("Opening the text editor, Sir. <run>gedit & || kate & || mousepad &</run>")
 
         # --- Git Operations ---
@@ -1049,21 +1094,29 @@ RESPONSE FORMAT:
         if any(w in msg_lower for w in ["temperature", "cpu temp", "how hot"]):
             if _IS_WINDOWS:
                 return respond("Checking CPU temperature, Sir. <run>Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace 'root/wmi' | Select -ExpandProperty CurrentTemperature</run>")
+            elif _IS_MAC:
+                return respond("Checking CPU temperature, Sir. <run>pmset -g therm</run>")
             return respond("Checking CPU temperature, Sir. <run>sensors | grep -i temp || cat /sys/class/thermal/thermal_zone*/temp</run>")
 
         if any(w in msg_lower for w in ["battery", "charge", "power status"]):
             if _IS_WINDOWS:
                 return respond("Checking battery status, Sir. <run>Get-CimInstance -ClassName Win32_Battery | Select-Object EstimatedChargeRemaining, BatteryStatus</run>")
+            elif _IS_MAC:
+                return respond("Checking battery status, Sir. <run>pmset -g batt</run>")
             return respond("Checking battery status, Sir. <run>upower -i $(upower -e | grep 'BAT') | grep -E 'state|to full|percentage' || acpi -b || cat /sys/class/power_supply/BAT*/capacity</run>")
 
         if any(w in msg_lower for w in ["sound status", "audio devices"]):
             if _IS_WINDOWS:
                 return respond("Listing audio devices, Sir. <run>Get-CimInstance -ClassName Win32_SoundDevice | Select-Object Name, Status</run>")
+            elif _IS_MAC:
+                return respond("Listing audio devices, Sir. <run>system_profiler SPAudioDataType</run>")
             return respond("Listing audio devices, Sir. <run>aplay -l; arecord -l</run>")
 
         if any(w in msg_lower for w in ["resolution", "screen size"]):
             if _IS_WINDOWS:
                 return respond("Fetching display resolution, Sir. <run>Get-CimInstance -ClassName Win32_VideoController | Select-Object CurrentHorizontalResolution, CurrentVerticalResolution</run>")
+            elif _IS_MAC:
+                return respond("Fetching display resolution, Sir. <run>system_profiler SPDisplaysDataType | grep Resolution</run>")
             return respond("Fetching display resolution, Sir. <run>xrandr | grep '*' || xrandr</run>")
 
         if any(w in msg_lower for w in ["ping", "check internet", "online test"]):
@@ -1074,22 +1127,30 @@ RESPONSE FORMAT:
         # --- System Controls & Volume ---
         if any(w in msg_lower for w in ["lock screen", "lock computer", "lock session"]):
             if _IS_WINDOWS:
-                return respond("Locking the screen, Sir. <run>(New-Object -ComObject WScript.Shell).SendKeys(\\^%{ESCAPE}\\\")\"</run>")
+                return respond("Locking the screen, Sir. <run>rundll32.exe user32.dll,LockWorkStation</run>")
+            elif _IS_MAC:
+                return respond("Locking the screen, Sir. <run>pmset displaysleepnow</run>")
             return respond("Locking the screen, Sir. <run>xdg-screensaver lock || gnome-screensaver-command -l || dbus-send --type=method_call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock</run>")
 
         if any(w in msg_lower for w in ["mute", "unmute", "toggle sound"]):
             if _IS_WINDOWS:
                 return respond("Toggling master volume mute status, Sir. <run>$wsh = New-Object -ComObject WScript.Shell; $wsh.SendKeys([char]173)</run>")
+            elif _IS_MAC:
+                return respond("Toggling mute status, Sir. <run>osascript -e 'set volume with output muted'</run>")
             return respond("Toggling master volume mute status, Sir. <run>amixer sset Master toggle</run>")
 
         if any(w in msg_lower for w in ["volume up", "louder", "increase volume"]):
             if _IS_WINDOWS:
                 return respond("Increasing volume, Sir. <run>$wsh = New-Object -ComObject WScript.Shell; 1..5 | ForEach-Object { $wsh.SendKeys([char]175) }</run>")
+            elif _IS_MAC:
+                return respond("Increasing volume, Sir. <run>osascript -e 'set volume output volume ((output volume of (get volume settings)) + 10)'</run>")
             return respond("Increasing volume, Sir. <run>amixer sset Master 10%+</run>")
 
         if any(w in msg_lower for w in ["volume down", "quieter", "decrease volume"]):
             if _IS_WINDOWS:
                 return respond("Adjusting volume, Sir. <run>$wsh = New-Object -ComObject WScript.Shell; 1..5 | ForEach-Object { $wsh.SendKeys([char]174) }</run>")
+            elif _IS_MAC:
+                return respond("Decreasing volume, Sir. <run>osascript -e 'set volume output volume ((output volume of (get volume settings)) - 10)'</run>")
             return respond("Adjusting volume, Sir. <run>amixer sset Master 10%-</run>")
 
         if any(w in msg_lower for w in ["time", "date", "what day", "what time"]):
@@ -1100,6 +1161,8 @@ RESPONSE FORMAT:
         if any(w in msg_lower for w in ["memory", "ram", "how much memory"]):
             if _IS_WINDOWS:
                 return respond("Checking memory usage now, Sir. <run>Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory | Format-List</run>")
+            elif _IS_MAC:
+                return respond("Checking memory usage now, Sir. <run>vm_stat</run>")
             return respond("Checking memory usage now, Sir. <run>free -h</run>")
 
         if any(w in msg_lower for w in ["disk", "storage", "space", "hard drive"]):
@@ -1110,16 +1173,22 @@ RESPONSE FORMAT:
         if any(w in msg_lower for w in ["ip", "network", "internet", "connection"]):
             if _IS_WINDOWS:
                 return respond("Checking your network details, Sir. <run>ipconfig | findstr /i \"IPv4 Gateway\"</run>")
+            elif _IS_MAC:
+                return respond("Checking your network details, Sir. <run>ifconfig | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}'</run>")
             return respond("Checking your network details, Sir. <run>hostname -I; ip route | grep default</run>")
 
         if any(w in msg_lower for w in ["process", "running", "what's running", "programs"]):
             if _IS_WINDOWS:
                 return respond("Let me see what is currently running, Sir. <run>Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 15 Name, @{N='MemMB';E={[math]::Round($_.WorkingSet64/1MB,1)}} | Format-Table -AutoSize</run>")
+            elif _IS_MAC:
+                return respond("Let me see what is currently running, Sir. <run>ps aux | sort -nr -k 4 | head -15</run>")
             return respond("Let me see what is currently running, Sir. <run>ps aux --sort=-%mem | head -15</run>")
 
         if any(w in msg_lower for w in ["system info", "system information", "computer info", "machine"]):
             if _IS_WINDOWS:
                 return respond("Pulling system information, Sir. <run>Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber, OSArchitecture | Format-List; Get-CimInstance -ClassName Win32_Processor | Select-Object Name | Format-List</run>")
+            elif _IS_MAC:
+                return respond("Pulling system information, Sir. <run>uname -a; sysctl -n machdep.cpu.brand_string</run>")
             return respond("Pulling system information, Sir. <run>uname -a; lscpu | grep \'Model name\'</run>")
 
         if any(w in msg_lower for w in ["who am i", "whoami", "my user"]):
@@ -1129,7 +1198,9 @@ RESPONSE FORMAT:
 
         if any(w in msg_lower for w in ["screenshot", "screen capture"]):
             if _IS_WINDOWS:
-                return respond("Taking a screenshot, Sir. <run>Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::PrimaryScreen.Bounds | ForEach-Object { $bmp = New-Object System.Drawing.Bitmap($_.Width, $_.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($_.Location, [System.Drawing.Point]::Empty, $_.Size); $bmp.Save(\\$env:USERPROFILE\\jarvis_screenshot.png\\\") }; Write-Host 'Saved.'\"</run>")
+                return respond("Taking a screenshot, Sir. <run>Add-Type -AssemblyName System.Windows.Forms; $bmp = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width, [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $path = Join-Path $env:USERPROFILE 'jarvis_screenshot.png'; $bmp.Save($path); Write-Host 'Saved.'</run>")
+            elif _IS_MAC:
+                return respond("Taking a screenshot, Sir. <run>screencapture ~/jarvis_screenshot.png; echo 'Saved.'</run>")
             return respond("Taking a screenshot, Sir. <run>gnome-screenshot -f ~/jarvis_screenshot.png; echo 'Saved.'</run>")
 
         if any(w in msg_lower for w in ["what can you do", "help", "capabilities"]):
@@ -1167,10 +1238,13 @@ RESPONSE FORMAT:
                     return respond(f"I could not run that, Sir: {err}")
                 return respond("I could not run that, Sir.")
 
-        # No system_agent available: wrap as a command and let the
-        # agentic loop execute it (keeps old behaviour).
-        safe_cmd = re.sub(r"[;&|`$]", "", user_message.strip())
-        return respond(f"Running that for you, Sir. <run>{safe_cmd}</run>")
+        # No system_agent available (offline mode): inform the user instead
+        # of blindly wrapping unknown input as a shell command.
+        return respond(
+            "I'm sorry Sir, I don't understand that request while in offline mode. "
+            "I can check the time, list files, open applications, check system stats, and more. "
+            "Please try again with a specific request."
+        )
 
     # ------------------------------------------------------------------
     # Static helpers
@@ -1180,10 +1254,12 @@ RESPONSE FORMAT:
     def _command_is_dangerous(command: str) -> bool:
         """Refuse to blindly execute commands that could harm the system."""
         c = command.lower().strip()
-        for blocked in ("rm -rf /", "rm -rf /*", "format ", "del /s",
+        for blocked in ("rm -rf /", "rm -rf /*", "format c:", "del /s /q",
                           "shutdown", "reboot", "halt", "poweroff",
                           "mkfs", "dd if=", "chmod -r 777 /",
-                          "rd /s", "rmdir /s"):
+                          "rd /s /q", "rmdir /s",
+                          "remove-item -recurse", "format-volume",
+                          "del /f /s"):
             if blocked in c:
                 return True
         return False
@@ -1218,6 +1294,8 @@ RESPONSE FORMAT:
                                         "whats running", "programs", "tasks"]):
             if _IS_WINDOWS:
                 return "Get-Process | Sort-Object CPU -Descending | Select-Object -First 15 Name,CPU,WorkingSet64 | Format-Table -AutoSize"
+            elif _IS_MAC:
+                return "ps aux | sort -nr -k 4 | head -15"
             return "ps aux --sort=-%mem | head -15"
 
         # Search for a file / pattern

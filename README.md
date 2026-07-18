@@ -1,26 +1,24 @@
-# JARVIS - Just A Rather Very Intelligent System
+# JARVIS
 
-A fully voice-controlled personal AI assistant with full system access, built in Python. Powered by Google's Gemini, Antigravity and Big Pickle.
-JARVIS listens for a wake word, processes natural language via a large language model, executes
-shell commands autonomously, and speaks responses aloud using a high-quality neural voice.
+A fully voice-controlled personal AI assistant with system-level access, built in Python. Powered by Google Gemini, OpenAI, or a local Ollama model.
 
-Fully functional on **Linux**, **macOS**, and **Windows**.
+JARVIS listens for a wake word, processes natural language via a large language model, executes shell commands autonomously, and speaks responses aloud using a high-quality neural voice. Fully functional on **Linux**, **macOS**, and **Windows**.
 
 ---
 
 ## Features
 
 - **Wake Word Detection** — Passive listening mode activated by saying "JARVIS"
-- **Always-On Voice (Web UI)** — Say "JARVIS" once, JARVIS responds "Yes, Sir?", then stays in command mode indefinitely for follow-up commands
-- **Active Follow-Up Window (Terminal)** — After each response, JARVIS stays active for 30 seconds to accept follow-up commands without repeating the wake word
-- **Speech-to-Text** — Microphone input processed via Google Speech Recognition (SpeechRecognition + PyAudio)
-- **Text-to-Speech** — High-quality British neural voice via Microsoft Edge TTS (edge-tts), decoded in-process using miniaudio and streamed through PyAudio
+- **Active Follow-Up Window** — After each response, stays active for 30 seconds to accept follow-up commands without repeating the wake word
+- **Speech-to-Text** — Microphone input processed via Google Speech Recognition or Gemini multimodal transcription (no daily quota)
+- **Text-to-Speech** — High-quality British neural voice via Microsoft Edge TTS (edge-tts), decoded in-process using miniaudio and streamed through sounddevice
 - **Agentic Loop** — Runs shell commands, reads the output, and iterates up to 8 times per turn to complete multi-step tasks autonomously
-- **Multiple LLM Backends** — Supports Google Gemini, OpenAI, or a locally-hosted Ollama model
-- **Safety Guardrails** — Hard-blocks destructive commands (fork bombs, disk wipes) and requires typed confirmation for dangerous operations (shutdown, rm -r, etc.)
-- **Persistent Working Directory** — cd commands persist across turns; the brain always knows the current directory
+- **Multiple LLM Backends** — Google Gemini, OpenAI, or locally-hosted Ollama
+- **Safety Guardrails** — Hard-blocks destructive commands (fork bombs, disk wipes) and requires typed confirmation for dangerous operations
+- **Persistent Working Directory** — `cd` commands persist across turns; the brain always knows the current directory
 - **Text Mode** — Full functionality via keyboard if microphone is unavailable
-- **Web Interface** — Optional browser-based chat UI served via Flask with Iron Man HUD design
+- **Web Interface** — Browser-based chat UI served via Flask with Iron Man HUD design
+- **Offline Fallback** — Built-in command matcher handles 50+ commands without any API key
 
 ---
 
@@ -30,14 +28,12 @@ Fully functional on **Linux**, **macOS**, and **Windows**.
 
 | Component | Library / Tool | Purpose |
 |-----------|---------------|---------|
-| Audio capture | PyAudio | Reads raw PCM audio from the microphone |
+| Audio capture | PyAudio / PyAudioWPatch | Reads raw PCM audio from the microphone |
 | Speech recognition | SpeechRecognition | Wraps the Google Speech Recognition API |
-| Recognition engine | Google Speech API (cloud) | Converts spoken audio to text |
-| Microphone selection | SpeechRecognition device enumeration | Prefers PulseAudio device for stability on Linux |
+| Recognition engine | Google Speech API or Gemini multimodal | Converts spoken audio to text |
+| Microphone selection | SpeechRecognition device enumeration | Prefers PulseAudio on Linux; default mic on Windows |
 
-Calibration is performed once at startup by sampling ambient noise for one second. The energy
-threshold is fixed after calibration to prevent the recognizer from drifting and requiring
-progressively louder speech over time.
+Calibration is performed once at startup by sampling ambient noise for one second. The energy threshold is fixed after calibration to prevent the recognizer from drifting.
 
 ### Text-to-Speech (TTS)
 
@@ -46,13 +42,9 @@ progressively louder speech over time.
 | Voice synthesis | edge-tts | Generates speech using Microsoft Edge neural TTS voices |
 | Voice used | en-GB-RyanNeural | British male voice suited to the JARVIS persona |
 | MP3 decoding | miniaudio | Pure-Python MP3 decoder; no system tools required |
-| Audio output | PyAudio | Streams decoded PCM frames to the system audio device |
-| ALSA noise suppression | ctypes + libasound | Silences harmless ALSA/JACK probe messages at startup |
+| Audio output | sounddevice | Streams decoded PCM frames to the system audio device |
 
-The pipeline is fully self-contained: edge-tts generates an MP3 to a temporary file,
-miniaudio decodes it to raw PCM, and PyAudio streams it to the speakers. No external
-tools such as mpg123, ffmpeg, or espeak are required. espeak-ng is used as an offline
-fallback only when internet access is unavailable.
+The pipeline is fully self-contained: edge-tts generates an MP3 to a temporary file, miniaudio decodes it to raw PCM, and sounddevice streams it to the speakers. No external tools such as mpg123 or ffmpeg are required. espeak-ng is used as an offline fallback only when internet is unavailable (Linux) or Windows SAPI (Windows).
 
 ### LLM Brain
 
@@ -60,142 +52,109 @@ fallback only when internet access is unavailable.
 |---------|---------------------|-------|
 | Google Gemini (default) | GEMINI_API_KEY | gemini-2.5-flash, free tier available |
 | OpenAI | OPENAI_API_KEY | Model configurable via OPENAI_MODEL |
-| Ollama (local) | OLLAMA_API_URL | Fully offline; set OLLAMA_MODEL for the model name |
-
----
+| Ollama (local) | OLLAMA_API_URL | Fully offline; set OLLAMA_MODEL for model name |
 
 ---
 
 ## System Requirements
 
 | | Linux | macOS | Windows |
-|---|---|---|---|
+|---|---|---|---|---|
 | Python | 3.9+ | 3.9+ | 3.9+ |
-| Audio library | libportaudio2 | portaudio (via Homebrew) | Included in PyAudio wheel |
-| Shell | bash | bash | cmd.exe / PowerShell |
+| Audio library | libportaudio2 | portaudio (Homebrew) | Included in PyAudio wheel |
+| Shell | bash | zsh | cmd.exe / PowerShell |
 | Launcher | run.sh | run.sh | run.bat |
 | Internet (TTS/STT) | Required for voice | Required for voice | Required for voice |
-| Offline brain | Fallback mode (no API key needed) | Fallback mode | Fallback mode |
-| Offline TTS | espeak-ng (`sudo apt install espeak-ng`) | espeak-ng (`brew install espeak`) | espeak-ng |
-| Offline STT | Not available — use text mode | Not available — use text mode | Not available — use text mode |
+| Offline brain | Fallback mode | Fallback mode | Fallback mode |
+| Offline TTS | espeak-ng | espeak-ng (brew) | espeak-ng |
 
 ---
 
 ## Installation
 
-### Linux (Debian / Ubuntu)
+### Quick install (recommended for end users)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/RehanIlyas-dev/JARVIS.git
-cd JARVIS
-
-# 2. Install system audio dependency
-sudo apt install libportaudio2
-
-# 3. Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# 4. Install Python dependencies
-pip install -r requirements.txt
-
-# 5. Run JARVIS
-./run.sh
+pip install jarvis
 ```
 
-### macOS
+Then create a `.env` file for your API key (see [Configuration](#configuration)) and install the system audio library:
+
+| Platform | One-time setup |
+|----------|---------------|
+| Linux | `sudo apt install libportaudio2` |
+| macOS | `brew install portaudio` |
+| Windows | `pip install pipwin && pipwin install pyaudio` |
+
+Then run:
 
 ```bash
-# 1. Install Homebrew if not already installed
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# 2. Install PortAudio (required for PyAudio)
-brew install portaudio
-
-# 3. Clone the repository
-git clone https://github.com/RehanIlyas-dev/JARVIS.git
-cd JARVIS
-
-# 4. Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# 5. Install Python dependencies
-pip install -r requirements.txt
-
-# 6. Run JARVIS
-./run.sh
+jarvis                    # voice mode (terminal)
+jarvis-web                # web UI at http://0.0.0.0:8080
+jarvis --text             # text-only mode
 ```
 
-Note: macOS uses different microphone device names than Linux. JARVIS will attempt to auto-detect
-your Built-in Microphone. If detection fails, run in text mode with `./run.sh --text`.
+### From source (for contributors)
 
-### Windows
-
-Windows support requires a few extra steps because PyAudio does not ship a pre-built wheel
-for recent Python versions on Windows and the default launcher is a `.bat` file.
-
-```powershell
-# 1. Install Python 3.9 or later from https://www.python.org/downloads/
-#    During install, check "Add Python to PATH"
-
-# 2. Clone the repository (requires Git for Windows: https://git-scm.com)
+```bash
 git clone https://github.com/RehanIlyas-dev/JARVIS.git
 cd JARVIS
-
-# 3. Create and activate a virtual environment
 python -m venv venv
-venv\Scripts\activate
-
-# 4. Install PyAudioWPatch (drop-in Windows-compatible PyAudio replacement)
-pip install PyAudioWPatch
-
-# 5. Create a pyaudio.py shim in site-packages to map pyaudio to pyaudiowpatch
-python -c "import pathlib, pyaudiowpatch; (pathlib.Path(pyaudiowpatch.__file__).parent.parent / 'pyaudio.py').write_text('# Shim\nfrom pyaudiowpatch import *\n')"
-
-# 6. Install remaining dependencies
-pip install -r requirements.txt
+source venv/bin/activate                    # Windows: venv\Scripts\activate
+pip install -e ".[dev]"
 ```
 
-Then run JARVIS:
+Then run with `./run.sh` (Linux/macOS) or `run.bat` (Windows).
 
-```bat
-run.bat --text
+#### Per-platform audio setup
+
+**Linux (Debian / Ubuntu):**
+```bash
+sudo apt install libportaudio2
 ```
 
-Note: Voice mode works on Windows. However, the system commands that JARVIS is taught
-(`ls`, `free -h`, `df -h`, etc.) are Linux/macOS commands. When using the Gemini or
-OpenAI backend the LLM will receive your OS name in the system prompt and should
-adapt its commands to Windows equivalents (`dir`, `tasklist`, `ipconfig`, etc.).
-The offline fallback mode is not adapted for Windows and will only run safe read-only
-commands correctly.
+**macOS:**
+```bash
+brew install portaudio
+```
+
+**Windows:**
+```powershell
+pip install pipwin
+pipwin install pyaudio
+```
+
+> **If `pipwin install pyaudio` fails**, download the wheel from [https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio) and install it manually:
+> ```powershell
+> pip install path\to\PyAudio‑*.whl
+> ```
+
+> **Note:** macOS auto-detects the Built-in Microphone. If detection fails, use `jarvis --text` for text mode. On Windows, the fallback mode auto-detects your OS and runs native PowerShell commands.
 
 ---
 
 ## Configuration
 
-JARVIS requires at least one LLM API key. Set one of the following environment variables:
+JARVIS requires at least one LLM API key. Copy `.env.example` to `.env` and fill in your keys:
 
 ```bash
 # Google Gemini (recommended — fast, free tier available)
-export GEMINI_API_KEY="your-key-here"
-# Obtain a key at: https://aistudio.google.com/apikey
+GEMINI_API_KEY="your-key-here"
 
 # OpenAI
-export OPENAI_API_KEY="your-key-here"
-export OPENAI_MODEL="gpt-4o-mini"          # optional, defaults to gpt-4o-mini
+OPENAI_API_KEY="your-key-here"
+OPENAI_MODEL="gpt-4o-mini"          # optional, defaults to gpt-4o-mini
 
 # Local Ollama (fully offline)
-export OLLAMA_API_URL="http://localhost:11434/v1"
-export OLLAMA_MODEL="llama3"
+OLLAMA_API_URL="http://localhost:11434/v1"
+OLLAMA_MODEL="llama3"
 ```
 
-To make the key permanent:
+To persist the key:
 
-- **Linux / macOS**: Add the export line to `~/.bashrc` or `~/.zshrc`
-- **Windows (PowerShell)**: Use `[System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your-key-here", "User")`
-- **Windows (System Settings)**: Search for "Edit the system environment variables" and add it via the GUI
+- **Linux / macOS:** Add export lines to `~/.bashrc` or `~/.zshrc`
+- **Windows (PowerShell):** `[System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your-key-here", "User")`
+- **Windows (GUI):** Search for "Edit the system environment variables" and add via the dialog
 
 ---
 
@@ -208,13 +167,13 @@ To make the key permanent:
 ```
 
 1. JARVIS boots, calibrates the microphone, and announces readiness.
-2. Say **"Jarvis"** followed by a command, for example:
+2. Say **"Jarvis"** followed by a command:
    - "Jarvis, what time is it?"
    - "Jarvis, how much memory do I have?"
    - "Jarvis, list all files in my home directory"
    - "Jarvis, open Firefox"
-3. Or say **"Jarvis"** alone and wait for "Yes, Sir?" before speaking your command.
-4. After each response, JARVIS remains active for **30 seconds** for follow-up commands without requiring the wake word again.
+3. Or say **"Jarvis"** alone and wait for "Yes, Sir?" before speaking.
+4. After each response, JARVIS remains active for **30 seconds** for follow-up commands without the wake word.
 5. Press `Ctrl+C` to exit.
 
 ### Text Mode
@@ -231,53 +190,7 @@ Type commands at the prompt. JARVIS speaks and prints each response. Type `exit`
 ./run_web.sh
 ```
 
-Opens a browser-based chat interface at `http://127.0.0.1:5000`. The web UI features an Iron Man HUD design with real-time system monitoring, voice control, and edge-tts speech output.
-
-#### First Launch
-
-1. Run `./run_web.sh` and open `http://127.0.0.1:5000` in **Chrome or Edge** (required for Web Speech API).
-2. You'll see a splash screen with an arc reactor animation. Click **ACTIVATE SYSTEMS** to start.
-3. The system boots with an animated sequence and JARVIS greets you with a time-appropriate message spoken aloud.
-
-#### Voice Commands (Web UI)
-
-The web UI uses an **always-on microphone** with wake word detection:
-
-1. **Say "JARVIS"** — JARVIS responds "Yes, Sir?" and enters **command mode** (green indicator).
-2. **Speak your command** — e.g., "list files", "what time is it", "check disk space".
-3. JARVIS processes the command, speaks the response, and **stays in command mode**.
-4. **Speak your next command** — no need to say "JARVIS" again.
-5. Repeat as many commands as you like — the mic stays active the entire session.
-
-#### Visual Indicators
-
-| State | Indicator | Meaning |
-|-------|-----------|---------|
-| Green pulse | "VOICE ACTIVE — Say JARVIS" | Listening for wake word |
-| Blue pulse | "COMMAND MODE — Speak your command" | Ready for your command |
-| Waveform | Audio bars animating | JARVIS is speaking |
-
-#### Keyboard Input (Web UI)
-
-You can also type commands at the bottom input bar. Type your command and press Enter or click the send button. Voice stays active in the background.
-
-#### Quick Commands
-
-Click the preset buttons on the right panel for common tasks:
-- **List Files** — Shows directory contents
-- **System Info** — Displays OS and CPU details
-- **Check Memory** — Shows RAM usage
-- **Disk Space** — Reports storage usage
-- **Who Am I** — Shows current user
-- **Network** — Displays IP and network info
-
-#### System Monitoring
-
-The left panel shows real-time system metrics updated every 3 seconds:
-- **CPU Usage** — Live graph with percentage
-- **RAM** — Used / total with progress bar
-- **Disk** — Used / total with progress bar
-- **Working Directory** — Current JARVIS cwd
+Opens a browser-based chat interface at `http://127.0.0.1:8080` featuring an Iron Man HUD design with real-time system monitoring, voice control, and TTS output. The web UI uses an **always-on microphone** with wake word detection — say "JARVIS" once, then issue commands freely.
 
 ### Debug Mode
 
@@ -285,189 +198,38 @@ The left panel shows real-time system metrics updated every 3 seconds:
 ./run.sh --verbose
 ```
 
-Prints the full LLM responses and any tracebacks to the terminal.
+Prints full LLM responses and tracebacks to the terminal.
 
-### Offline Mode (No API Key)
+---
 
-If no API key is set, or the Gemini free-tier quota is exhausted (429), JARVIS automatically switches to **fallback mode**. No LLM API required. Say the wake word and command as usual, or type them in text mode.
+## Offline Mode (No API Key)
 
-**What works offline:**
-- **Brain**: Built-in command matcher handles 50+ commands without any API
-- **NL → Command Translation**: Natural-language requests like "show me the processes" or "search for readme" are translated to the correct OS-native command and executed via `SystemAgent`
-- **TTS**: Falls back to `espeak-ng` (robotic but functional). Install with `sudo apt install espeak-ng`
-- **Text mode**: Fully offline — type commands directly
+If no API key is set or the Gemini free-tier quota is exhausted, JARVIS automatically switches to **fallback mode**. No LLM API required.
 
-**What needs internet offline:**
-- **STT (Voice input)**: Uses Google Speech Recognition API — requires internet. There is no offline STT fallback in the terminal version. Use text mode (`./run.sh --text`) if offline.
-- **Web UI voice**: Uses browser's Web Speech API — also requires internet.
+**Available commands in offline mode:**
 
-**Tip**: In a fully offline environment, use text mode: `./run.sh --text`
-
-#### Greetings
-
-| Command | Action |
-|---------|--------|
-| "Hello" / "Hi" / "Hey" | JARVIS greets you and confirms offline mode |
-
-#### Navigation & Files
-
-| Command | Action |
-|---------|--------|
-| "List files" / "Show me" / "What's in" | `ls -la` |
-| "Where am I" / "Working directory" | `pwd` |
-| "Go home" | `cd ~` |
-| "Go to downloads" | `cd ~/Downloads` |
-| "Go to documents" | `cd ~/Documents` |
-| "Go to desktop" | `cd ~/Desktop` |
-| "Read file X" / "Show file X" | `cat X` |
-| "Delete file X" / "Remove file X" | `rm -i X` (with confirmation) |
-| "Create folder X" / "Make directory X" | `mkdir -p X` |
-| "Search for X" / "Find X" | `find . -iname '*X*' -maxdepth 3` |
-
-#### Applications
-
-| Command | Action |
-|---------|--------|
-| "Open Firefox" / "Browser" | Launches Firefox |
-| "Open Chrome" | Launches Google Chrome |
-| "Open Brave" | Launches Brave Browser |
-| "Open VS Code" / "Open code" | Launches VS Code |
-| "Open Sublime" | Launches Sublime Text |
-| "Open PyCharm" | Launches PyCharm |
-| "Open Slack" | Launches Slack |
-| "Open Discord" | Launches Discord |
-| "Open Telegram" | Launches Telegram |
-| "Open Spotify" / "Music" | Launches Spotify |
-| "Open terminal" / "Console" | Opens a terminal window |
-| "Open file manager" / "Open files" | Opens the file manager |
-| "Open calculator" / "Calc" | Opens the calculator |
-| "Open system monitor" | Opens System Monitor |
-| "Open notepad" / "Text editor" | Opens the text editor |
-
-#### System Info
-
-| Command | Action |
-|---------|--------|
-| "What time is it" / "Date" | `date` |
-| "Memory" / "RAM" / "How much memory" | `free -h` |
-| "Disk" / "Storage" / "Space" | `df -h` |
-| "IP" / "Network" / "Internet" | `hostname -I && ip route` |
-| "Processes" / "What's running" | `ps aux --sort=-%mem \| head -15` |
-| "System info" / "Machine" | `uname -a && lscpu` |
-| "Who am I" / "My user" | `whoami && id` |
-| "Temperature" / "CPU temp" | `sensors` or `/sys/class/thermal` |
-| "Battery" / "Charge" / "Power status" | `upower` or `acpi` |
-| "Sound status" / "Audio devices" | `aplay -l && arecord -l` |
-| "Resolution" / "Screen size" | `xrandr` |
-| "Weather" / "Forecast" | `curl wttr.in` |
-
-#### System Controls
-
-| Command | Action |
-|---------|--------|
-| "Volume up" / "Louder" | `amixer sset Master 10%+` |
-| "Volume down" / "Quieter" | `amixer sset Master 10%-` |
-| "Mute" / "Unmute" / "Toggle sound" | `amixer sset Master toggle` |
-| "Lock screen" | Locks the screen |
-| "Screenshot" / "Screen capture" | Takes a screenshot |
-| "Ping" / "Check internet" | `ping -c 3 google.com` |
-
-#### Git & Docker
-
-| Command | Action |
-|---------|--------|
-| "Git status" / "Repo status" | `git status` |
-| "Git log" / "Commits" | `git log -n 5 --oneline` |
-| "Git branch" / "Branches" | `git branch -a` |
-| "Docker containers" / "Docker status" | `docker ps -a` |
-| "Docker images" | `docker images` |
-
-#### Other
-
-| Command | Action |
-|---------|--------|
-| "Help" / "What can you do" | Lists available capabilities |
-| "Thanks" / "Thank you" | JARVIS acknowledges |
-| "Goodbye" / "Shutdown" | JARVIS signs off |
-
-In offline mode, JARVIS can also run any safe shell command directly (e.g., typing `ls -la` or `whoami`). Destructive commands are still blocked.
-
-### Git Commands (Offline Mode)
-
-JARVIS understands **60+ git commands** with natural language. Say them or type them directly.
-
-| Category | Examples |
+| Category | Commands |
 |----------|----------|
-| Basic | "git init", "clone repo [URL]", "git status" |
-| Staging | "stage all", "stage [file]", "unstage", "remove file [file]" |
-| Committing | "commit changes", "commit [message]", "amend commit" |
-| Branching | "list branches", "create branch [name]", "switch to [branch]", "merge [branch]", "delete branch [name]" |
-| Remote | "list remotes", "add remote [name] [URL]", "rename remote [old] to [new]" |
-| Fetching & Pulling | "git fetch", "git pull" |
-| Pushing | "push changes", "force push", "push all branches", "push tags" |
-| Stashing | "stash changes", "unstash", "apply stash", "list stashes", "stash to branch [name]" |
-| Inspecting | "git log", "log graph", "git diff", "who wrote [file]", "contributors", "recent activity" |
-| Tagging | "list tags", "create tag [name]", "delete tag [name]" |
-| Undoing | "undo last commit", "revert commit", "discard changes", "hard reset" |
-| Advanced | "cherry-pick [commit]", "rebase [branch]", "update submodules", "count commits", "verify repo" |
-| Config | "show config", "set user name [name]", "set user email [email]" |
+| Greetings | "Hello", "Hi", "Hey" |
+| Navigation | "List files", "Where am I", "Go home", "Go to downloads" |
+| File management | "Read file X", "Delete file X", "Create folder X", "Search for X" |
+| Applications | "Open Firefox", "Open Chrome", "Open VS Code", "Open terminal", and 15+ more |
+| System info | "What time is it", "Memory", "Disk", "IP", "Processes", "System info", "Who am I", "Temperature", "Battery", "Resolution" |
+| System controls | "Volume up/down", "Mute", "Lock screen", "Screenshot", "Ping" |
+| Git | 60+ git commands: "git status", "commit changes", "create branch", "push changes", etc. |
+| Docker | "Docker containers", "Docker images" |
 
-Any raw git command typed directly also works (e.g., `git log --oneline --graph`).
+Any safe shell command typed directly also works (e.g., `ls -la`). Destructive commands remain blocked.
 
 ---
 
-## Example Commands
+## Security
 
-| Voice Command | Action |
-|--------------|--------|
-| "What time is it?" | Runs `date` and speaks the result |
-| "List my files" | Runs `ls -la` and reports contents |
-| "How much memory do I have?" | Runs `free -h` and reads the output |
-| "What is my IP address?" | Runs `hostname -I` and reports |
-| "Find all images on my desktop" | Runs `find` and lists matches |
-| "Create a folder called projects" | Runs `mkdir -p projects` |
-| "Open Firefox" | Launches Firefox in the background |
-| "Check disk space" | Runs `df -h` and reports |
-| "What processes are running?" | Runs `ps aux` and summarizes |
+- JARVIS executes real shell commands as the current user. Do not run it as root.
+- Destructive commands (`rm -rf /`, fork bombs, disk format commands) are permanently blocked.
+- Commands such as `shutdown`, `rm -r`, and `passwd` require explicit typed confirmation.
+- API keys must be set as environment variables only. Never commit them to version control.
 
----
-
-## Architecture
-
-```
-Microphone (PyAudio)
-        |
-        v
-SpeechRecognition + Google Speech API
-        |
-        v
-Wake Word Detection ("jarvis")
-        |
-        v
-    LLM Brain  <----  System Prompt (cwd, OS, directory listing)
-   (Gemini /             |
-  OpenAI /            <run> command extracted
-   Ollama)                |
-        |                 v
-        |         SystemAgent.execute_command()
-        |           (safety check, cd tracking,
-        |            subprocess.run with cwd)
-        |                 |
-        +----  Result fed back to LLM
-        |      (loop up to 8 iterations)
-        |
-        v
-edge-tts  -->  miniaudio  -->  PyAudio  -->  Speakers
-```
-
----
-
-## Future Enhancements & Roadmap
-
-- **Local Wake Word Engine**: Integrate `openWakeWord` or `Porcupine` to handle local wake-word detection with higher accuracy and minimal CPU overhead.
-- **Local STT / TTS**: Support fully local speech-to-text (e.g., `whisper.cpp` or `faster-whisper`) and local text-to-speech (e.g., `kokoro` or `piper`) for a completely offline voice assistant.
-- **Home Automation Integration**: Expand the system agent with integrations for Home Assistant, smart devices, and IoT peripherals.
-- **Containerization**: Add a Dockerfile supporting audio device passthrough to isolate JARVIS's workspace.
 
 ---
 
@@ -476,82 +238,225 @@ edge-tts  -->  miniaudio  -->  PyAudio  -->  Speakers
 ### Microphone not detected
 
 ```bash
-# Install PortAudio
+# Install PortAudio (Linux)
 sudo apt install libportaudio2
 
-# Verify PyAudio can see your microphone
+# Verify microphone visibility
 source venv/bin/activate
 python -c "import speech_recognition as sr; print(sr.Microphone.list_microphone_names())"
 
-# If no microphone is available, use text mode
+# Fallback to text mode
 ./run.sh --text
 ```
 
 ### No audio output
 
-The TTS pipeline requires internet access to generate speech via edge-tts. If internet
-is unavailable, install the espeak-ng fallback:
+TTS requires internet access for edge-tts. If offline, install the espeak-ng fallback:
 
 ```bash
+# Linux
 sudo apt install espeak-ng
+
+# macOS
+brew install espeak
+
+# Windows
+# Download from: https://github.com/espeak-ng/espeak-ng/releases
 ```
 
-### Gemini rate limit error (429)
+### Gemini rate limit (HTTP 429)
 
-The free tier of the Gemini API is limited to 20 requests per day per model. Options:
+The free Gemini tier is limited to ~20 requests/day per model. Options:
 
 - Wait until the daily quota resets (midnight Pacific Time)
 - Switch to a paid Gemini plan
-- Use OpenAI or a local Ollama model instead
+- Use OpenAI or a local Ollama model
 
-### API key not found
+### macOS
+
+#### Microphone not detected
+
+macOS requires microphone permission for Python processes. Terminal (or your IDE) must be granted access:
+
+1. Open **System Settings → Privacy & Security → Microphone**
+2. Ensure **Terminal** (or your app) is enabled
+3. Restart JARVIS after changing this setting
+
+If the mic still fails, try the default CoreAudio input:
 
 ```bash
-# Verify the key is set in the current shell
-echo $GEMINI_API_KEY
+# List audio input devices
+python -c "import speech_recognition as sr; print(sr.Microphone.list_microphone_names())"
 
-# If empty, export it and re-run
-export GEMINI_API_KEY="your-key-here"
-./run.sh
+# Fallback to text mode
+./run.sh --text
 ```
+
+#### PortAudio not found
+
+```bash
+brew install portaudio
+pip install --force-reinstall pyaudio
+```
+
+#### Gatekeeper blocking edge-tts / Python
+
+If macOS blocks Python from accessing the network or audio:
+
+1. Open **System Settings → Privacy & Security → Files and Folders**
+2. Ensure **Terminal** has necessary permissions
+3. Or run from a terminal launched directly (not from an IDE)
+
+#### espeak-ng not found (offline TTS)
+
+```bash
+brew install espeak-ng
+```
+
+### Windows
+
+#### PyAudio installation fails
+
+PyAudio does not ship a pre-built wheel for all Python versions on Windows.
+
+**Option A — pipwin (recommended):**
+```powershell
+pip install pipwin
+pipwin install pyaudio
+```
+
+**Option B — Manual wheel:**
+1. Download the correct wheel from [https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio)
+2. Install it: `pip install path\to\PyAudio‑*.whl`
+
+**Option C — PyAudioWPatch (alternative):**
+```powershell
+pip install PyAudioWPatch
+# Then replace pyaudio with pyaudiowpatch in stt.py imports
+```
+
+#### PowerShell execution policy blocks scripts
+
+If you see execution policy errors when running `run.ps1`:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Or use `run.bat` (Command Prompt) instead — it doesn't require script execution.
+
+#### Antivirus / Windows Defender flagging JARVIS
+
+JARVIS executes shell commands. Some antivirus software may flag this behavior:
+
+- Add the project folder to your antivirus exclusion list
+- Or use **text mode** (`run.bat --text`) which only runs commands you type
+- Windows Defender SmartScreen may warn on first run — click **More info → Run anyway**
+
+#### Microphone not working
+
+1. Check **Settings → Privacy & Security → Microphone** — ensure "Let apps access your microphone" is **On**
+2. Verify the correct input device is selected in **Sound Settings → Input**
+3. If using a laptop, check for a physical microphone mute switch/key (Fn+F4 or similar)
+
+#### Speech recognition stops after a few commands
+
+The free Google Speech API has a ~50 requests/day limit. Once exhausted, recognition silently fails.
+
+**Solution:** Set `GEMINI_API_KEY` in your `.env` file — Gemini has no daily quota and provides more accurate transcription.
+
+```powershell
+# Create .env file with your key
+echo GEMINI_API_KEY=your-key-here > .env
+```
+
+#### No audio output
+
+TTS requires internet for edge-tts. If offline, install espeak-ng:
+
+1. Download from [https://github.com/espeak-ng/espeak-ng/releases](https://github.com/espeak-ng/espeak-ng/releases)
+2. Run the installer and ensure `espeak-ng.exe` is in your PATH
+3. Restart JARVIS
 
 ### Web UI voice not working
 
-- Use **Chrome or Edge** — other browsers don't support the Web Speech API.
-- The browser will ask for microphone permission on first use. Click **Allow**.
-- If the mic indicator stays grey, click the microphone button in the input bar to toggle voice on/off.
-- Make sure your microphone is selected in the browser: click the camera/mic icon in the address bar.
-
-### Web UI audio not playing
-
-- Click **ACTIVATE SYSTEMS** on the splash screen first — browsers block auto-playing audio without user interaction.
-- If TTS fails silently, check your internet connection (edge-tts requires network access).
-- Look at the browser console (F12) for any error messages.
-
-### Web UI command not responding to voice
-
-- Say **"JARVIS"** clearly and wait for "Yes, Sir?" before speaking your command.
-- The mic stays in command mode after the first wake word — no need to repeat "JARVIS".
-- Speak clearly and at a normal pace. The Web Speech API works best with clear enunciation.
-- Check the listening bar at the bottom for live transcript feedback.
+- Use **Chrome or Edge** — other browsers lack Web Speech API support.
+- Allow microphone permission when prompted by the browser.
+- Click the microphone button in the input bar to toggle voice on/off.
+- Ensure the correct microphone is selected in browser site settings.
 
 ---
 
-## Security Notes
+## CI/CD
 
-- JARVIS executes real shell commands as the current user. Do not run it as root.
-- A set of destructive commands (rm -rf /, fork bombs, disk format commands) are permanently blocked regardless of LLM output.
-- Commands such as shutdown, rm -r, and passwd require explicit typed confirmation before execution.
-- API keys should be set as environment variables only. Never commit them to version control.
+Every push and pull request triggers **GitHub Actions** (`.github/workflows/ci.yml`):
+
+| Job | Runners | What it does |
+|-----|---------|-------------|
+| **lint** | ubuntu | `py_compile` checks all source files for syntax errors |
+| **test** | ubuntu / macos / windows × Python 3.9–3.12 | Runs the 90-test cross-platform suite (`pytest tests/`) — verifies every fallback command is correct for Linux, macOS, and Windows |
+| **build** | ubuntu | Creates a pip-installable wheel and source distribution |
+| **publish** | ubuntu (tags only) | On `v*` tags: builds, publishes to PyPI, and creates a GitHub Release with release notes |
+
+To trigger a release:
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+The `publish` job requires a `PYPI_API_TOKEN` secret in your GitHub repository settings. Without it, the build step still runs but publishing is skipped.
+
+---
+
+## Contributing
+
+### Setup
+
+```bash
+git clone https://github.com/RehanIlyas-dev/JARVIS.git
+cd JARVIS
+python -m venv venv && source venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### Running tests
+
+```bash
+pytest tests/ -v
+```
+
+The test suite requires no API keys, no microphone, and no internet. It validates the offline fallback command matcher across all three platforms (Linux, macOS, Windows) — 90 test cases total.
+
+
+### Submitting changes
+
+1. **Fork** the repo on GitHub
+2. **Clone** your fork and create a branch:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/JARVIS.git
+   cd JARVIS
+   git checkout -b your-feature-branch
+   ```
+3. **Install and verify** the existing tests pass:
+   ```bash
+   python -m venv venv && source venv/bin/activate
+   pip install -e ".[dev]"
+   pytest tests/
+   ```
+4. **Make your changes** — keep functions short, match the surrounding style, and add platform-specific branches (`_IS_WINDOWS`, `_IS_MAC`) for any new system commands
+5. **Run `pytest tests/`** again — all 90 tests must pass
+6. **Push** your branch and open a Pull Request to the `main` branch
+
+The CI pipeline will automatically run your PR against Linux, macOS, and Windows across Python 3.9–3.12. All checks must pass before merging.
 
 ---
 
 ## Acknowledgments
 
-- **Google Gemini** — Powerful LLM for natural language understanding and command generation
+- **Google Gemini** — LLM for natural language understanding and command generation
 - **edge-tts** — Microsoft Edge neural TTS for high-quality voice synthesis
-- **SpeechRecognition** — Google Speech API for reliable speech-to-text
-- **PyAudio** — Cross-platform audio I/O for microphone input and TTS output
-- **miniaudio** — In-process MP3 decoding without external tools
-- **Flask** — Web framework for the optional browser interface
-- **CSS Battle** — HTML/CSS template designs from the CSS Battle community
+- **SpeechRecognition** — Google Speech API for speech-to-text
+- **PyAudio** / **PyAudioWPatch** — Cross-platform audio I/O
+- **miniaudio** — In-process MP3 decoding
+- **sounddevice** — Audio output streaming
+- **Flask** — Web framework for the browser interface

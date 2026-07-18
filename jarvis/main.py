@@ -33,6 +33,7 @@ def run_agentic_loop(brain, system_agent, tts, user_message):
     Stops after MAX_AGENTIC_ITERATIONS to prevent runaway loops.
     """
     current_message = user_message
+    spoken_anything = False
 
     for iteration in range(1, MAX_AGENTIC_ITERATIONS + 1):
 
@@ -43,6 +44,7 @@ def run_agentic_loop(brain, system_agent, tts, user_message):
             fallback = "I did not get a response, Sir. Please try again."
             print(f"\n[JARVIS] {fallback}")
             _safe_speak(tts, fallback)
+            spoken_anything = True
             break
 
         # 2. Extract any system command enclosed in <run>...</run>
@@ -55,6 +57,7 @@ def run_agentic_loop(brain, system_agent, tts, user_message):
         if speech_text:
             print(f"\n[JARVIS] {speech_text}")
             _safe_speak(tts, speech_text)
+            spoken_anything = True
 
         # 5. If there is a command to run, execute it and loop
         if cmd_to_run:
@@ -79,10 +82,16 @@ def run_agentic_loop(brain, system_agent, tts, user_message):
                 warning = "I have reached my maximum command iterations for this turn, Sir."
                 print(f"\n[JARVIS] {warning}")
                 _safe_speak(tts, warning)
+                spoken_anything = True
                 break
         else:
             # No command - the response is the final answer
             break
+
+    if not spoken_anything:
+        final_msg = "Done, Sir."
+        print(f"\n[JARVIS] {final_msg}")
+        _safe_speak(tts, final_msg)
 
 
 def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
@@ -106,7 +115,7 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
     def _settle_audio():
         """Let the audio system settle after playback before opening mic."""
         import time
-        time.sleep(0.3)
+        time.sleep(0.5)
 
     def handle_command(command_text):
         """Process a command and return True (always - keeps the caller clean)."""
@@ -148,6 +157,8 @@ def start_voice_mode(stt, tts, brain, system_agent, wake_word="jarvis"):
                     return
 
             handle_command(follow_lower)
+            stt.reset()
+            time.sleep(0.5)
 
     while True:
         try:

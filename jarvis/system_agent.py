@@ -48,6 +48,8 @@ class SystemAgent:
             self.shell = shutil.which("powershell") or shutil.which("powershell.exe") or "powershell.exe"
         elif self.os_name == "Linux":
             self.shell = "/bin/bash"
+        elif self.os_name == "Darwin":
+            self.shell = "/bin/zsh"
         else:
             self.shell = None
         # Track cwd so "cd" commands are persistent across turns
