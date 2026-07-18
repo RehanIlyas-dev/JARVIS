@@ -17,15 +17,7 @@ tts : TextToSpeech — high-quality TTS via edge-tts with miniaudio/sounddevice.
 config : Centralised configuration constants.
 """
 
-from . import (
-    main,
-    web_app,
-    brain,
-    agentic_loop,
-    fallback_matcher,
-    system_agent,
-    stt,
-    tts,
-    config,
-)
+# Modules are imported by consumers; no top-level eager imports to keep
+# the package importable even when optional deps (like speech_recognition)
+# are not installed or are incompatible with the current Python version.
 

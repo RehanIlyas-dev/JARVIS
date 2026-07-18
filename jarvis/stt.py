@@ -1,14 +1,18 @@
 import os
 import platform
+import sys
 from typing import Optional
-
-import speech_recognition as sr
 
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except Exception:
     pass
+
+try:
+    import speech_recognition as sr
+except ImportError:
+    sr = None  # type: ignore[assignment]
 
 
 class SpeechToText:
