@@ -120,7 +120,7 @@ The pipeline is fully self-contained: edge-tts generates an MP3 to a temporary f
 ## System Requirements
 
 | | Linux | macOS | Windows |
-|---|---|---|---|---|
+|---|---|---|---|
 | Python | 3.9+ | 3.9+ | 3.9+ |
 | Audio library | libportaudio2 | portaudio (Homebrew) | Included in PyAudio wheel |
 | Shell | bash | zsh | cmd.exe / PowerShell |
