@@ -199,8 +199,17 @@
     if (stderr) content += (content ? '\n' : '') + stderr;
     if (!content) content = '[exit code: ' + exitCode + ']';
 
-    card.textContent = content;
+    card.textContent = sanitizeOutput(content);
     return card;
+  }
+
+  function sanitizeOutput(text) {
+    if (!text) return '';
+    return text
+      .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+      .replace(/\x1b\][0-9;]*[^\x1b]*\x1b\\/g, '')
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+      .trim();
   }
 
   function escapeHtml(text) {
@@ -247,11 +256,6 @@
     terminal.appendChild(createCmdAck(msg));
     scrollToBottom();
 
-    // JARVIS card (response will fill in)
-    const jarvisCard = createJarvisCard('', '');
-    terminal.appendChild(jarvisCard);
-    scrollToBottom();
-
     setStatus('thinking', 'ANALYZING QUERY...');
 
     if (activeSource) activeSource.close();
@@ -264,7 +268,10 @@
 
     activeSource.addEventListener('assistant_response', function (e) {
       const data = JSON.parse(e.data);
-      typewriterAppend(jarvisCard, data.content, 14);
+      const card = createJarvisCard('', '');
+      terminal.appendChild(card);
+      scrollToBottom();
+      typewriterAppend(card, data.content, 14);
       speakText(data.content);
     });
 

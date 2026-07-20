@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.env*
+.git/
+.gitignore
+README.md
+tests/
+venv/
+*.egg-info/
+dist/
+build/
+run*.sh
+run*.bat
+run*.ps1

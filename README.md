@@ -133,10 +133,18 @@ The pipeline is fully self-contained: edge-tts generates an MP3 to a temporary f
 
 ## Installation
 
-### Quick install (recommended for end users)
+### Docker (recommended — no system deps needed)
 
 ```bash
-pip install jarvis
+docker run -d -p 5000:5000 --env-file .env rehanilyas4726/jarvis
+```
+
+Open `http://localhost:5000` in your browser. No Python, no audio libs, no pip needed.
+
+### Quick install (pip)
+
+```bash
+pip install jarvis-voice-assistant
 ```
 
 Then create a `.env` file for your API key (see [Configuration](#configuration)) and install the system audio library:
@@ -151,7 +159,7 @@ Then run:
 
 ```bash
 jarvis                    # voice mode (terminal)
-jarvis-web                # web UI at http://0.0.0.0:8080
+jarvis-web                # web UI at http://127.0.0.1:5000
 jarvis --text             # text-only mode
 ```
 
@@ -234,9 +242,10 @@ Type commands at the prompt. JARVIS speaks and prints each response. Type `exit`
 ```bash
 jarvis-web                # if installed via pip
 ./run_web.sh              # if installed from source
+docker run -d -p 5000:5000 --env-file .env rehanilyas4726/jarvis  # via Docker
 ```
 
-Opens a browser-based chat interface at `http://127.0.0.1:8080` featuring an Iron Man HUD design with real-time system monitoring, voice control, and TTS output. The web UI uses an **always-on microphone** with wake word detection — say "JARVIS" once, then issue commands freely.
+Opens a browser-based chat interface at `http://127.0.0.1:5000` featuring an Iron Man HUD design with real-time system monitoring, voice control, and TTS output. The web UI uses an **always-on microphone** with wake word detection — say "JARVIS" once, then issue commands freely.
 
 ### Debug Mode
 
@@ -433,6 +442,34 @@ TTS requires internet for edge-tts. If offline, install espeak-ng:
 
 ---
 
+## Docker
+
+JARVIS ships as a Docker image with all dependencies baked in — no Python, pip, or system audio libs to install.
+
+### Build locally
+
+```bash
+docker compose build
+docker compose up -d
+# Open http://localhost:5000
+```
+
+### Run from Docker Hub
+
+```bash
+docker run -d -p 5000:5000 --env-file .env rehanilyas4726/jarvis
+```
+
+### Run text CLI mode
+
+```bash
+docker run -it --rm --env-file .env --entrypoint jarvis rehanilyas4726/jarvis --text
+```
+
+The Docker image is automatically built and pushed to Docker Hub on every push to `main` by the CI pipeline.
+
+---
+
 ## CI/CD
 
 Every push and pull request triggers **GitHub Actions** (`.github/workflows/ci.yml`):
@@ -442,6 +479,7 @@ Every push and pull request triggers **GitHub Actions** (`.github/workflows/ci.y
 | **lint** | ubuntu | `py_compile` checks all source files for syntax errors |
 | **test** | ubuntu / macos / windows × Python 3.9–3.12 | Runs the 90-test cross-platform suite (`pytest tests/`) — verifies every fallback command is correct for Linux, macOS, and Windows |
 | **build** | ubuntu | Creates a pip-installable wheel and source distribution |
+| **docker** | ubuntu (main + tags) | Builds and pushes Docker image to `rehanilyas4726/jarvis:latest` (and `:vX.Y.Z` on tags) |
 | **publish** | ubuntu (tags only) | On `v*` tags: builds, publishes to PyPI, and creates a GitHub Release with release notes |
 
 To trigger a release:

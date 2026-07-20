@@ -1,0 +1,12 @@
+services:
+  jarvis:
+    build: .
+    image: rehanilyas4726/jarvis:latest
+    container_name: jarvis
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - FLASK_HOST=0.0.0.0
+    restart: unless-stopped
