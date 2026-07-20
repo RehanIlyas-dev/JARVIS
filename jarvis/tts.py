@@ -133,6 +133,4 @@ class TextToSpeech:
         print(f"[JARVIS TTS] No TTS engine available. Text was: {text}")
 
 
-if __name__ == "__main__":
-    tts = TextToSpeech()
-    tts.speak("Hello Sir. I am JARVIS. I am fully operational and ready to assist you.")
+# Test block (manual testing only)

@@ -1,6 +1,12 @@
 import os
 from typing import Final
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 # Maximum LLM->command->result iterations per user turn (prevents infinite loops)
 MAX_AGENTIC_ITERATIONS: Final[int] = int(os.getenv("MAX_AGENTIC_ITERATIONS", "8"))
 

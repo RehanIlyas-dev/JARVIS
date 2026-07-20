@@ -190,6 +190,13 @@ def api_tts() -> Response:
     return Response(audio_data, mimetype="audio/mpeg")
 
 
+@app.after_request
+def add_security_headers(resp: Response) -> Response:
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    return resp
+
+
 @app.before_request
 def before_request() -> None:
     init_app()

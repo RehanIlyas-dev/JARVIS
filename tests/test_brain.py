@@ -5,11 +5,7 @@ when in fallback mode, and that the brain correctly delegates to the online
 provider when configured.
 """
 
-import sys
-import os
 import platform
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock

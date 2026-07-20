@@ -4,12 +4,6 @@ import sys
 from typing import Optional
 
 try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
-
-try:
     import speech_recognition as sr
 except ImportError:
     sr = None  # type: ignore[assignment]
@@ -242,11 +236,4 @@ class SpeechToText:
             return None
 
 
-if __name__ == "__main__":
-    stt = SpeechToText()
-    print("\nSpeak something to test...")
-    heard = stt.listen(timeout=5, phrase_time_limit=8)
-    if heard:
-        print(f"Success! Recognized text: '{heard}'")
-    else:
-        print("Failed to recognize speech.")
+# Test block (manual testing only)

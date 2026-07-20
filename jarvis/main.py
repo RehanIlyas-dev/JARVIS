@@ -2,12 +2,6 @@ import argparse
 import time
 from typing import Any, Optional
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
-
 from .config import STT_FAIL_THRESHOLD, ACTIVE_SECS
 from .stt import SpeechToText
 from .tts import TextToSpeech

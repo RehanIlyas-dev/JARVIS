@@ -4,12 +4,6 @@ import re
 import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
-
 from .config import CONTEXT_WINDOW, HISTORY_LIMIT
 from .fallback_matcher import FallbackMatcher
 
@@ -398,25 +392,5 @@ RESPONSE FORMAT:
 
 
 # ------------------------------------------------------------------
-# Test block
+# Test block (manual testing only)
 # ------------------------------------------------------------------
-if __name__ == "__main__":
-    brain = JarvisBrain({"user": "rehan", "os": platform.system(), "cwd": os.getcwd()}, debug=True)
-
-    print("\n--- TEST 1: List directories ---")
-    resp = brain.get_response("Open the directories of this folder")
-    print(f"Response: {resp}")
-    print(f"Command: {brain.extract_command(resp)}")
-    print(f"Speech: {brain.clean_speech_text(resp)}")
-
-    print("\n--- TEST 2: System info ---")
-    resp = brain.get_response("What system am I on?")
-    print(f"Response: {resp}")
-
-    print("\n--- TEST 3: Greeting ---")
-    resp = brain.get_response("Hello JARVIS")
-    print(f"Response: {resp}")
-
-    print("\n--- TEST 4: RAM ---")
-    resp = brain.get_response("How much RAM do I have?")
-    print(f"Response: {resp}")

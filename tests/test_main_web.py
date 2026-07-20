@@ -6,11 +6,6 @@ the generate_agentic_loop generator correctly.
 Tests use mocks for brain, system_agent, tts, stt, and Flask.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 

@@ -13,11 +13,8 @@ Tests verify that components work together end-to-end:
 """
 
 import json
-import sys
 import os
 import platform
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from unittest.mock import MagicMock, patch

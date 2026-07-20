@@ -3,11 +3,6 @@
 Unit tests for jarvis/config.py — verify all constants are correct.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from jarvis import config
 
 

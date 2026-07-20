@@ -24,11 +24,6 @@ Tests are organized by:
   - History recording
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 import pytest
 from unittest.mock import MagicMock
 from jarvis.fallback_matcher import FallbackMatcher
